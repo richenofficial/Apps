@@ -68,6 +68,10 @@
                         <span class="text-[10px] text-green-400 font-bold block truncate"><i class="fa-solid fa-location-dot mr-1"></i><span x-text="profilToko.kota || 'Kota Belum Set'"></span></span>
                     </div>
                 </div>
+                <div class="text-[10px] text-slate-400 space-y-0.5 border-t border-slate-800/60 pt-2 font-medium">
+                    <p class="line-clamp-2"><i class="fa-solid fa-map-marker-alt mr-1 text-slate-500 w-3 text-center"></i><span x-text="profilToko.alamat || 'Alamat toko belum dilengkapi.'"></span></p>
+                    <p><i class="fa-solid fa-phone mr-1 text-slate-500 w-3 text-center"></i><span x-text="profilToko.wa || '-'"></span></p>
+                </div>
             </div>
             
             <nav class="p-4 space-y-2.5 text-xs font-semibold flex flex-row md:flex-col overflow-x-auto md:overflow-x-visible whitespace-nowrap md:whitespace-normal scrollbar-none">
@@ -79,28 +83,91 @@
                 <button @click="adminTab = 'keuangan'; subTabKeuangan = 'menu'" :class="adminTab === 'keuangan' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800'" class="px-3 py-2.5 rounded-xl flex items-center gap-2 transition mr-2 md:mr-0 flex-shrink-0 md:w-full text-left"><i class="fa fa-scale-balanced w-4 text-center"></i> 6. Menu Keuangan</button>
                 <button @click="adminTab = 'laporan'; subTabLaporan = 'menu'" :class="adminTab === 'laporan' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800'" class="px-3 py-2.5 rounded-xl flex items-center gap-2 transition mr-2 md:mr-0 flex-shrink-0 md:w-full text-left"><i class="fa fa-chart-line w-4 text-center"></i> 7. Menu Laporan</button>
                 
-                <div class="pt-2 md:pt-4 border-t border-slate-800">
-                    <button @click="logoutUser()" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 w-full text-left"><i class="fa fa-power-off"></i> Keluar</button>
+                <div class="pt-2 md:pt-4 border-l md:border-l-0 md:border-t border-slate-800 pl-2 md:pl-0 flex-shrink-0">
+                    <button @click="logoutUser()" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-2 text-left"><i class="fa fa-power-off"></i> Keluar</button>
                 </div>
             </nav>
         </aside>
 
         <main class="flex-1 p-4 md:p-6 overflow-y-auto bg-slate-50 w-full min-w-0">
             
-            <div x-show="adminTab === 'profil'" class="bg-white p-6 rounded-2xl border shadow-sm max-w-xl">
-                <h3 class="text-sm font-bold text-slate-900 mb-4 border-b pb-2"><i class="fa fa-store text-green-600 mr-2"></i>1. Informasi Profil Bisnis</h3>
+            <!-- TAB PROFIL -->
+            <div x-show="adminTab === 'profil'" class="bg-white p-6 rounded-2xl border shadow-sm max-w-xl" x-transition>
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i class="fa fa-store text-green-600"></i>1. Informasi Profil Bisnis</h3>
+                </div>
                 <div class="space-y-4 text-xs">
-                    <div><label class="block font-bold mb-1 text-slate-500">Nama Toko Mitra</label><input type="text" x-model="profilForm.nama" class="w-full p-2.5 border rounded-xl bg-slate-50 font-semibold"></div>
-                    <div><label class="block font-bold mb-1 text-slate-500">Alamat Lengkap</label><textarea rows="2" x-model="profilForm.alamat" class="w-full p-2.5 border rounded-xl bg-slate-50 font-medium"></textarea></div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div><label class="block font-bold mb-1 text-slate-500">Kota</label><input type="text" x-model="profilForm.kota" class="w-full p-2.5 border rounded-xl bg-slate-50"></div>
-                        <div><label class="block font-bold mb-1 text-slate-500">WhatsApp</label><input type="text" x-model="profilForm.wa" class="w-full p-2.5 border rounded-xl bg-slate-50"></div>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-500">Nama Toko Mitra</label>
+                        <input type="text" x-model="profilForm.nama" class="w-full p-2.5 border rounded-xl bg-slate-50 font-semibold">
                     </div>
-                    <button type="button" @click="saveProfil()" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold uppercase">Simpan Profil</button>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-500">Alamat Lengkap Toko</label>
+                        <textarea rows="2" x-model="profilForm.alamat" class="w-full p-2.5 border rounded-xl bg-slate-50 font-medium"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-500">Kota / Kabupaten</label>
+                            <input type="text" x-model="profilForm.kota" class="w-full p-2.5 border rounded-xl bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-1 text-slate-500">Nomor Telepon / WhatsApp</label>
+                            <input type="text" x-model="profilForm.wa" class="w-full p-2.5 border rounded-xl bg-slate-50">
+                        </div>
+                    </div>
+                    <button type="button" @click="saveProfil()" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold uppercase tracking-wider">Simpan & Perbarui</button>
                 </div>
             </div>
 
-            <!-- TAB TRANSAKSI POS KASIR DENGAN SCANNER YANG DIPERBAIKI -->
+            <!-- TAB STOK & GUDANG -->
+            <div x-show="adminTab === 'stok'" class="space-y-4">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl border shadow-xs">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">📦 Logistik Gudang Barang & Multi Konversi Satuan</h3>
+                        <p class="text-[11px] text-slate-400">Pendaftaran produk wajib menyertakan foto untuk scanner visual AI serta konversi harga dinamis custom.</p>
+                    </div>
+                    <button @click="adminModal = true; editMode = false;" class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl">+ Input Barang Baru</button>
+                </div>
+
+                <div class="bg-white rounded-2xl border table-responsive shadow-xs">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b">
+                            <tr>
+                                <th class="p-3">Visual Foto</th>
+                                <th class="p-3">Nama Produk</th>
+                                <th class="p-3">Kategori</th>
+                                <th class="p-3 text-right">Harga Utama Terkecil</th>
+                                <th class="p-3 text-center">Sisa Stok (Pcs)</th>
+                                <th class="p-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="p in products" :key="p.firebaseId">
+                                <tr class="border-b hover:bg-slate-50/50 text-xs">
+                                    <td class="p-3 w-16">
+                                        <img :src="p.foto || 'https://via.placeholder.com/150?text=No+Image'" class="w-12 h-12 rounded-lg object-cover border">
+                                    </td>
+                                    <td class="p-3">
+                                        <span class="font-bold text-slate-800 block" x-text="p.nama"></span>
+                                        <template x-if="p.barcode">
+                                            <span class="text-[9px] bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono mt-0.5 inline-block" x-text="'Barcode: ' + p.barcode"></span>
+                                        </template>
+                                    </td>
+                                    <td class="p-3 text-slate-500" x-text="p.kategori"></td>
+                                    <td class="p-3 text-right font-bold text-green-600" x-text="formatRupiah(p.hargaJualPcs)"></td>
+                                    <td class="p-3 text-center font-bold text-slate-700" x-text="p.stokAwal + ' pcs'"></td>
+                                    <td class="p-3 text-center">
+                                        <button @click="editProduct(p)" class="text-blue-500 hover:text-blue-700 mr-2"><i class="fa fa-edit"></i></button>
+                                        <button @click="deleteProduct(p.firebaseId)" class="text-red-500 hover:text-red-700"><i class="fa fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB TRANSAKSI KASIR POS DENGAN SCANNER YANG DIPERBAIKI -->
             <div x-show="adminTab === 'pos'" class="space-y-4">
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <div class="lg:col-span-4 space-y-4">
@@ -124,7 +191,8 @@
                         <div class="bg-white p-4 rounded-2xl border shadow-sm relative">
                             <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5"><i class="fa fa-keyboard text-blue-600"></i> Ketik Nama / Barcode Produk</h4>
                             <div class="relative">
-                                <input type="text" x-model="posQueryKetik" @input="jalankanAutoCompleteQuery()" placeholder="Ketik nama produk..." class="w-full p-2.5 border rounded-xl bg-slate-50 text-xs font-bold focus:bg-white focus:outline-blue-500">
+                                <input type="text" x-model="posQueryKetik" @input="jalankanAutoCompleteQuery()" placeholder="Ketik 1 karakter..." class="w-full p-2.5 border rounded-xl bg-slate-50 text-xs font-bold focus:bg-white focus:outline-blue-500">
+                                <button x-show="posQueryKetik" @click="posQueryKetik = ''; autoCompleteResults = []" class="absolute right-2.5 top-2.5 text-slate-400"><i class="fa fa-times-circle"></i></button>
                             </div>
                             <div x-show="autoCompleteResults.length > 0" class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[999] max-h-52 overflow-y-auto divide-y divide-slate-100">
                                 <template x-for="p in autoCompleteResults" :key="p.firebaseId">
@@ -142,9 +210,9 @@
                     </div>
                     
                     <div class="lg:col-span-8 bg-white rounded-2xl border p-4 flex flex-col min-h-[460px] shadow-sm">
-                        <div class="flex items-center justify-between border-b pb-3 mb-3">
+                        <div class="flex flex-wrap items-center justify-between border-b pb-3 mb-3 gap-2">
                             <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wide flex items-center gap-1"><i class="fa fa-calculator text-green-600"></i> Keranjang Transaksi Aktif</h3>
-                            <button @click="posCart = []" class="bg-red-50 text-red-600 border border-red-200 px-2.5 py-1 rounded-lg font-bold text-[10px]">Kosongkan</button>
+                            <button @click="posCart = []" class="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-2.5 py-1 rounded-lg font-bold text-[10px]"><i class="fa fa-trash"></i> Batal Semua</button>
                         </div>
 
                         <div class="flex-1 table-responsive">
@@ -165,14 +233,14 @@
                                             <td class="p-3 text-center uppercase font-black text-orange-600" x-text="item.satuan"></td>
                                             <td class="p-3 text-center">
                                                 <div class="flex items-center justify-center gap-1">
-                                                    <button @click="if(item.qty > 1) item.qty--" class="w-5 h-5 bg-slate-100 rounded text-center font-bold">-</button>
+                                                    <button @click="if(item.qty > 1) item.qty--" class="w-5 h-5 bg-slate-100 rounded text-center font-bold text-xs">-</button>
                                                     <span class="w-8 text-center font-bold" x-text="item.qty"></span>
-                                                    <button @click="item.qty++" class="w-5 h-5 bg-slate-100 rounded text-center font-bold">+</button>
+                                                    <button @click="item.qty++" class="w-5 h-5 bg-slate-100 rounded text-center font-bold text-xs">+</button>
                                                 </div>
                                             </td>
                                             <td class="p-3 text-right font-black text-slate-900" x-text="formatRupiah(item.hargaTerpilih * item.qty)"></td>
                                             <td class="p-3 text-center">
-                                                <button @click="posCart.splice(idx, 1)" class="text-red-500"><i class="fa fa-trash-can"></i></button>
+                                                <button @click="posCart.splice(idx, 1)" class="text-red-500 hover:text-red-700 px-1"><i class="fa fa-trash-can"></i></button>
                                             </td>
                                         </tr>
                                     </template>
@@ -182,7 +250,7 @@
                         
                         <div class="border-t pt-4 mt-auto">
                             <div class="flex justify-between items-center mb-4">
-                                <span class="font-bold text-xs text-slate-500">TOTAL TRANSAKSI:</span>
+                                <span class="font-bold text-xs text-slate-500">TOTAL TRANSAKSI KASIR:</span>
                                 <span class="text-3xl font-black text-green-600" x-text="formatRupiah(posCartTotal)"></span>
                             </div>
                             <button @click="bayarPOS()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg">SELESAIKAN TRANSAKSI</button>
@@ -191,39 +259,10 @@
                 </div>
             </div>
 
-            <!-- TAB STOK & PRODUK -->
-            <div x-show="adminTab === 'stok'" class="space-y-4">
-                <div class="flex justify-between items-center bg-white p-4 rounded-xl border shadow-xs">
-                    <h3 class="text-sm font-bold text-slate-900">📦 Logistik Gudang Barang</h3>
-                    <button @click="adminModal = true; editMode = false;" class="bg-green-600 text-white text-xs font-bold px-4 py-2 rounded-xl">+ Input Barang Baru</button>
-                </div>
-                <div class="bg-white rounded-2xl border table-responsive shadow-xs">
-                    <table class="w-full text-sm text-left">
-                        <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b">
-                            <tr>
-                                <th class="p-3">Nama Produk</th>
-                                <th class="p-3">Kategori</th>
-                                <th class="p-3 text-right">Harga Jual Pcs</th>
-                                <th class="p-3 text-center">Stok</th>
-                                <th class="p-3 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="p in products" :key="p.firebaseId">
-                                <tr class="border-b hover:bg-slate-50/50 text-xs">
-                                    <td class="p-3 font-bold text-slate-800" x-text="p.nama"></td>
-                                    <td class="p-3 text-slate-500" x-text="p.kategori"></td>
-                                    <td class="p-3 text-right font-bold text-green-600" x-text="formatRupiah(p.hargaJualPcs)"></td>
-                                    <td class="p-3 text-center font-bold" x-text="p.stokAwal + ' pcs'"></td>
-                                    <td class="p-3 text-center">
-                                        <button @click="editProduct(p)" class="text-blue-500 mr-2"><i class="fa fa-edit"></i></button>
-                                        <button @click="deleteProduct(p.firebaseId)" class="text-red-500"><i class="fa fa-trash"></i></button>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Placeholder untuk menu lain agar tidak error tampilannya -->
+            <div x-show="adminTab !== 'profil' && adminTab !== 'stok' && adminTab !== 'pos'" class="bg-white p-8 rounded-2xl border text-center">
+                <h3 class="text-lg font-bold text-slate-700">Menu <span class="uppercase" x-text="adminTab"></span> Sedang Aktif</h3>
+                <p class="text-xs text-slate-400 mt-1">Gunakan navigasi sidebar untuk berpindah antar fitur.</p>
             </div>
         </main>
     </div>
@@ -237,20 +276,8 @@
                 <p class="text-xs text-gray-400">Pilih jenis konversi transaksi keluar belanja konsumen:</p>
             </div>
             <div class="grid grid-cols-2 gap-3 mb-4">
-                <button @click="selectConversionSatuan(scannedProduct.namaSatuanA || 'Dus', scannedProduct.hargaDus, scannedProduct.isiSatuanA || 1)" class="p-3 border-2 rounded-xl text-center hover:border-green-600 transition">
-                    <span class="block text-xs font-bold uppercase text-gray-500" x-text="(scannedProduct?.namaSatuanA || 'DUS')"></span>
-                    <span class="text-sm font-black text-slate-800" x-text="formatRupiah(scannedProduct?.hargaDus)"></span>
-                </button>
-                <button @click="selectConversionSatuan(scannedProduct.namaSatuanB || 'Pak', scannedProduct.hargaPak, scannedProduct.isiSatuanB || 1)" class="p-3 border-2 rounded-xl text-center hover:border-green-600 transition">
-                    <span class="block text-xs font-bold uppercase text-gray-500" x-text="(scannedProduct?.namaSatuanB || 'PAK')"></span>
-                    <span class="text-sm font-black text-slate-800" x-text="formatRupiah(scannedProduct?.hargaPak)"></span>
-                </button>
-                <button @click="selectConversionSatuan(scannedProduct.namaSatuanC || 'Renceng', scannedProduct.hargaRenceng, scannedProduct.isiSatuanC || 1)" class="p-3 border-2 rounded-xl text-center hover:border-green-600 transition">
-                    <span class="block text-xs font-bold uppercase text-gray-500" x-text="(scannedProduct?.namaSatuanC || 'RENCENG')"></span>
-                    <span class="text-sm font-black text-slate-800" x-text="formatRupiah(scannedProduct?.hargaRenceng)"></span>
-                </button>
-                <button @click="selectConversionSatuan(scannedProduct.namaSatuanD || 'Pcs', scannedProduct.hargaJualPcs, 1)" class="p-3 border-2 rounded-xl text-center hover:border-green-600 transition">
-                    <span class="block text-xs font-bold uppercase text-gray-500" x-text="(scannedProduct?.namaSatuanD || 'PCS')"></span>
+                <button @click="selectConversionSatuan('Pcs', scannedProduct?.hargaJualPcs, 1)" class="p-3 border-2 rounded-xl text-center hover:border-green-600 transition col-span-2">
+                    <span class="block text-xs font-bold uppercase text-gray-500">Pcs (Satuan Utama)</span>
                     <span class="text-sm font-black text-slate-800" x-text="formatRupiah(scannedProduct?.hargaJualPcs)"></span>
                 </button>
             </div>
@@ -258,10 +285,10 @@
         </div>
     </div>
 
-    <!-- MODAL TAMBAH PRODUK -->
+    <!-- MODAL INPUT / EDIT PRODUK -->
     <div x-show="adminModal" class="fixed inset-0 z-[4000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" x-cloak x-transition>
         <div class="bg-white p-6 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
-            <h3 class="text-base font-black text-slate-800 mb-4" x-text="editMode ? 'Ubah Informasi Komoditas' : 'Pendaftaran Produk & Konversi Satuan Mandiri'"></h3>
+            <h3 class="text-base font-black text-slate-800 mb-4" x-text="editMode ? 'Ubah Informasi Komoditas' : 'Pendaftaran Produk Mandiri'"></h3>
             <div class="space-y-3.5 text-xs">
                 <div><label class="block font-bold text-slate-500 mb-1">Nama Produk Lengkap</label><input type="text" x-model="form.nama" class="w-full p-2.5 border rounded-xl bg-slate-50 font-semibold"></div>
                 <div><label class="block font-bold text-slate-500 mb-1">Kode Barcode Produk (Opsional)</label><input type="text" x-model="form.barcode" class="w-full p-2.5 border rounded-xl bg-slate-50 font-mono text-sm tracking-wider"></div>
@@ -272,6 +299,7 @@
                     <div><label class="block font-bold text-slate-500 mb-1">Stok Gudang (Pcs)</label><input type="number" x-model.number="form.stokAwal" class="w-full p-2.5 border rounded-xl font-bold bg-slate-50"></div>
                 </div>
                 <div><label class="block font-bold text-slate-500 mb-1">Harga Jual Pcs (Rp)</label><input type="number" x-model.number="form.hargaJualPcs" class="w-full p-2.5 border rounded-xl font-bold bg-slate-50"></div>
+                
                 <div class="flex gap-2 justify-end pt-3">
                     <button @click="adminModal = false" class="px-4 py-2 border rounded-xl font-bold">Batal</button>
                     <button @click="saveProduct()" class="px-5 py-2 bg-green-600 text-white rounded-xl font-bold">Simpan Cloud</button>
@@ -318,7 +346,7 @@
                 products: [], posCart: [], posMetodeBayar: 'Tunai',
                 profilToko: { nama: '', alamat: '', kota: '', wa: '', logo: '' },
                 profilForm: { nama: '', alamat: '', kota: '', wa: '', logo: '' },
-                form: { nama: '', barcode: '', foto: '', namaSatuanA: 'Dus', namaSatuanB: 'Pak', namaSatuanC: 'Renceng', namaSatuanD: 'Pcs', hargaDus: 0, hargaPak: 0, hargaRenceng: 0, hargaJualPcs: 0, hargaBeli: 0, stokAwal: 0, kategori: 'Sembako', isiSatuanA: 40, isiSatuanB: 10, isiSatuanC: 10 },
+                form: { nama: '', barcode: '', foto: '', hargaJualPcs: 0, hargaBeli: 0, stokAwal: 0, kategori: 'Sembako' },
                 
                 posQueryKetik: '',
                 autoCompleteResults: [],
@@ -496,8 +524,8 @@
 
                     statusStatus.innerText = "Mengekstrak bentuk visual objek...";[cite: 2]
 
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    canvas.width = video.videoWidth || 640;
+                    canvas.height = video.videoHeight || 480;
                     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
                     modelAiMobileNet.classify(canvas).then(predictions => {
