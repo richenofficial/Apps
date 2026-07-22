@@ -204,7 +204,7 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.15);
             } catch (e) {
-                console.log("Audio AudioContext error:", e);
+                console.log("Audio Context error:", e);
             }
         }
 
@@ -279,7 +279,7 @@
             const [storeInfo, setStoreInfo] = useState({});
             
             const [isBackingUp, setIsBackingUp] = useState(false);
-            const [isRestoring, setIsRestoring] = useState(false);
+            const [isSyncing, setIsSyncing] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
             const [datePreset, setDatePreset] = useState('ALL');
@@ -320,8 +320,62 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
+            // ----------------------------------------------------------------------
+            // FUNGSI SINKRONISASI DATA REALTIME (FIREBASE -> INDEXEDDB)
+            // ----------------------------------------------------------------------
+            const syncFromFirebase = async (cloudData) => {
+                if (!cloudData) return;
+                setIsSyncing(true);
+                try {
+                    await db.transaction('rw', [db.products, db.categories, db.transactions, db.settings], async () => {
+                        if (cloudData.products && Array.isArray(cloudData.products)) {
+                            await db.products.clear();
+                            await db.products.bulkPut(cloudData.products);
+                        }
+                        if (cloudData.categories && Array.isArray(cloudData.categories)) {
+                            await db.categories.clear();
+                            await db.categories.bulkPut(cloudData.categories);
+                        }
+                        if (cloudData.transactions && Array.isArray(cloudData.transactions)) {
+                            await db.transactions.clear();
+                            await db.transactions.bulkPut(cloudData.transactions);
+                        }
+                        if (cloudData.settings && typeof cloudData.settings === 'object') {
+                            await db.settings.put({ ...cloudData.settings, id: 'store_info' });
+                        }
+                    });
+
+                    if (cloudData.updatedAt) {
+                        const formatted = new Date(cloudData.updatedAt).toLocaleString('id-ID');
+                        setLastBackupTime(formatted);
+                        localStorage.setItem('last_backup_time', formatted);
+                    }
+                    await refreshData();
+                } catch (err) {
+                    console.error("Sinkronisasi gagal:", err);
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
+            // Inisialisasi awal + Listener Realtime dari Cloud Firebase
             useEffect(() => {
-                initSampleData().then(() => { refreshData(); });
+                initSampleData().then(() => {
+                    refreshData();
+                    
+                    // Pasang listener realtime agar jika device lain menekan backup, device ini otomatis update
+                    const backupRef = firebaseDb.ref('pos_backup');
+                    backupRef.on('value', (snapshot) => {
+                        const data = snapshot.val();
+                        if (data) {
+                            syncFromFirebase(data);
+                        }
+                    });
+                });
+
+                return () => {
+                    firebaseDb.ref('pos_backup').off();
+                };
             }, []);
 
             const refreshData = async () => {
@@ -335,7 +389,6 @@
                 if (s) setStoreInfo(s);
             };
 
-            // 1. FUNGSI UPLOAD BUP (INDEXEDDB -> FIREBASE)
             const handleBackupToFirebase = async () => {
                 setIsBackingUp(true);
                 try {
@@ -358,63 +411,30 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Data di HP/Device ini telah di-upload ke Cloud Firebase.");
+                    alert("✅ Berhasil! Data di-backup & disinkronkan ke seluruh perangkat terhubung.");
                 } catch (error) {
-                    alert("❌ Gagal upload ke Firebase: " + error.message);
+                    alert("❌ Gagal backup: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
             };
 
-            // 2. FUNGSI RESTORE / SINKRONKAN (FIREBASE -> INDEXEDDB)
-            const handleRestoreFromFirebase = async () => {
-                if (!confirm("⚠️ Peringatan: Proses Sinkronisasi akan memperbarui data di HP/Device ini dengan data terbaru dari Cloud Firebase. Lanjutkan?")) {
-                    return;
-                }
-
-                setIsRestoring(true);
-                try {
-                    const snapshot = await firebaseDb.ref('pos_backup').once('value');
-                    const cloudData = snapshot.val();
-
-                    if (!cloudData) {
-                        alert("❌ Belum ada data backup di Cloud Firebase. Silakan lakukan 'Upload Backup' dari Device pertama terlebih dahulu.");
-                        setIsRestoring(false);
-                        return;
-                    }
-
-                    // Bersihkan IndexedDB lokal
-                    await db.products.clear();
-                    await db.categories.clear();
-                    await db.transactions.clear();
-                    await db.settings.clear();
-
-                    // Timpa dengan data dari Cloud
-                    if (cloudData.products && cloudData.products.length > 0) {
-                        await db.products.bulkAdd(cloudData.products);
-                    }
-                    if (cloudData.categories && cloudData.categories.length > 0) {
-                        await db.categories.bulkAdd(cloudData.categories);
-                    }
-                    if (cloudData.transactions && cloudData.transactions.length > 0) {
-                        await db.transactions.bulkAdd(cloudData.transactions);
-                    }
-                    if (cloudData.settings) {
-                        await db.settings.put(cloudData.settings);
-                    }
-
-                    await refreshData();
-
-                    const updatedStr = cloudData.updatedAt ? new Date(cloudData.updatedAt).toLocaleString('id-ID') : new Date().toLocaleString('id-ID');
-                    setLastBackupTime(updatedStr);
-                    localStorage.setItem('last_backup_time', updatedStr);
-
-                    alert("🎉 BERHASIL! Data di HP/Device ini sekarang SUDAH SAMA DENGAN DEVICE PERTAMA!");
-                } catch (error) {
-                    alert("❌ Gagal mengambil data dari Firebase: " + error.message);
-                } finally {
-                    setIsRestoring(false);
-                }
+            const handleRestoreFromFirebase = () => {
+                setIsSyncing(true);
+                firebaseDb.ref('pos_backup').once('value')
+                    .then(snapshot => {
+                        const data = snapshot.val();
+                        if (data) {
+                            syncFromFirebase(data);
+                            alert("✅ Berhasil menarik & menyinkronkan data terbaru dari Cloud!");
+                        } else {
+                            alert("Data di Cloud Firebase masih kosong!");
+                        }
+                    })
+                    .catch(err => {
+                        alert("❌ Gagal mengambil data: " + err.message);
+                    })
+                    .finally(() => setIsSyncing(false));
             };
 
             useEffect(() => {
@@ -660,6 +680,11 @@
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
                 refreshData();
+
+                // Otomatis push ke Firebase agar perangkat lain ter-update
+                setTimeout(() => {
+                    handleBackupToFirebase();
+                }, 500);
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -682,12 +707,20 @@
                 });
                 setIsProductModalOpen(false);
                 refreshData();
+
+                // Otomatis push ke Firebase
+                setTimeout(() => {
+                    handleBackupToFirebase();
+                }, 500);
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Hapus produk ini?")) {
                     await db.products.delete(id);
                     refreshData();
+                    setTimeout(() => {
+                        handleBackupToFirebase();
+                    }, 500);
                 }
             };
 
@@ -717,7 +750,10 @@
                                 <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-xl shadow-lg text-white">V</div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold">● PWA Ready</span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        {isSyncing ? 'Sinkronisasi...' : 'Realtime Sync Active'}
+                                    </span>
                                 </div>
                             </div>
 
@@ -740,20 +776,26 @@
                             </nav>
                         </div>
 
-                        {/* PANEL DUA TOMBOL BACKUP & SINKRONISASI PADA SIDEBAR */}
-                        <div className="space-y-2">
-                            <button onClick={handleBackupToFirebase} disabled={isBackingUp || isRestoring} className="w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
-                                <i data-lucide="cloud-upload" className="w-3.5 h-3.5"></i> {isBackingUp ? 'Uploading...' : 'Upload Backup'}
-                            </button>
-
-                            <button onClick={handleRestoreFromFirebase} disabled={isBackingUp || isRestoring} className="w-full py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
-                                <i data-lucide="cloud-download" className="w-3.5 h-3.5"></i> {isRestoring ? 'Sinkronisasi...' : 'Restore / Ambil Data'}
+                        <div className="space-y-3">
+                            <button onClick={handleBackupToFirebase} disabled={isBackingUp} className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow">
+                                <i data-lucide="cloud-upload" className="w-4 h-4"></i> {isBackingUp ? 'Memproses...' : 'Backup & Sinkronkan'}
                             </button>
 
                             {lastBackupTime && (
-                                <p className="text-[9.5px] text-slate-400 text-center font-semibold pt-1">
-                                    Update Terakhir: {lastBackupTime}
+                                <p className="text-[10px] text-slate-400 text-center font-semibold">
+                                    Sinkronisasi Terakhir:<br/>{lastBackupTime}
                                 </p>
+                            )}
+
+                            {lowStockProducts.length > 0 && (
+                                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-semibold flex items-center gap-2">
+                                    <span>⚠️</span> <span>{lowStockProducts.length} Produk Stok Habis</span>
+                                </div>
+                            )}
+                            {expiredSoonProducts.length > 0 && (
+                                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-semibold flex items-center gap-2">
+                                    <span>⌛</span> <span>{expiredSoonProducts.length} Produk Mau Expired</span>
+                                </div>
                             )}
                         </div>
                     </aside>
@@ -763,20 +805,19 @@
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
                                     <h2 className="text-2xl font-black text-white">Dashboard Penjualan</h2>
-                                    <div className="flex gap-2 md:hidden">
-                                        <button onClick={handleBackupToFirebase} disabled={isBackingUp} className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
-                                            <i data-lucide="cloud-upload" className="w-3.5 h-3.5"></i> Upload
-                                        </button>
-                                        <button onClick={handleRestoreFromFirebase} disabled={isRestoring} className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
-                                            <i data-lucide="cloud-download" className="w-3.5 h-3.5"></i> Restore
-                                        </button>
-                                    </div>
+                                    <button onClick={handleBackupToFirebase} disabled={isBackingUp} className="md:hidden px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow">
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Backup
+                                    </button>
                                 </div>
 
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <p className="text-xs text-slate-400 uppercase font-bold">Total Omzet</p>
                                         <p className="text-lg md:text-xl font-black text-indigo-300 mt-1">Rp {transactions.reduce((a, t) => a + t.total, 0).toLocaleString('id-ID')}</p>
+                                    </div>
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <p className="text-xs text-slate-400 uppercase font-bold">Total HPP</p>
+                                        <p className="text-lg md:text-xl font-black text-amber-300 mt-1">Rp {transactions.reduce((a, t) => a + (t.totalCost || 0), 0).toLocaleString('id-ID')}</p>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <p className="text-xs text-slate-400 uppercase font-bold">Profit</p>
@@ -798,6 +839,73 @@
                                         <div className="h-56"><canvas ref={topProductsChartRef}></canvas></div>
                                     </div>
                                 </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                                                <span>⚠️</span> Barang Stok Menipis (Perlu Dibelanjakan)
+                                            </h3>
+                                            <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-500/30">
+                                                {lowStockProducts.length} Barang
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                            {lowStockProducts.length === 0 ? (
+                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Semua stok barang aman/mencukupi 👍</p>
+                                            ) : (
+                                                lowStockProducts.map(p => (
+                                                    <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                                                        <div>
+                                                            <p className="font-bold text-white">{p.name}</p>
+                                                            <p className="text-[10px] text-slate-400">Min. Stok: {p.minStock} Pcs | SKU: {p.sku}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-xs font-black text-amber-300 bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/30 inline-block">
+                                                                Sisa {p.stock} Pcs
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 border border-rose-500/30 p-4 rounded-2xl shadow-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-sm font-bold text-rose-300 flex items-center gap-2">
+                                                <span>⌛</span> Barang Mendekati Kadaluwarsa (Expired)
+                                            </h3>
+                                            <span className="text-xs bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-bold border border-rose-500/30">
+                                                {expiredSoonProducts.length} Barang
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                            {expiredSoonProducts.length === 0 ? (
+                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Tidak ada barang yang mendekati expired 👍</p>
+                                            ) : (
+                                                expiredSoonProducts.map(p => {
+                                                    const diffDays = Math.ceil((new Date(p.expiredDate) - new Date()) / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                                                            <div>
+                                                                <p className="font-bold text-white">{p.name}</p>
+                                                                <p className="text-[10px] text-slate-400">Tgl Exp: <span className="text-rose-300 font-bold">{p.expiredDate}</span></p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-xs font-black text-rose-300 bg-rose-500/20 px-2 py-1 rounded-md border border-rose-500/30 inline-block">
+                                                                    {diffDays <= 0 ? 'Sudah Expired' : `${diffDays} Hari Lagi`}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -806,7 +914,7 @@
                                 <div className="flex-1 flex flex-col p-4 overflow-hidden">
                                     <div className="relative mb-4 flex gap-2">
                                         <div className="relative flex-1">
-                                            <input type="text" placeholder="Cari nama, barcode, SKU..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white text-sm" />
+                                            <input type="text" placeholder="Ketik 1 huruf/angka, nama, barcode, atau SKU..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white text-sm" />
                                             <i data-lucide="search" className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-300"></i>
                                         </div>
 
@@ -931,19 +1039,27 @@
                                 
                                 <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
                                     <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Sync (fpos-8da84)
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Realtime Sync (fpos-8da84)
                                     </h3>
                                     <p className="text-xs text-slate-300">
-                                        Gunakan <b>Upload</b> untuk mengirim data dari HP ini ke cloud, atau <b>Restore</b> untuk mengambil data terbaru dari HP lain.
+                                        Gunakan tombol di bawah jika ingin memaksa pengiriman atau penarikan data antar perangkat.
                                     </p>
                                     <div className="flex gap-2">
-                                        <button onClick={handleBackupToFirebase} disabled={isBackingUp || isRestoring} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2">
-                                            <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                            {isBackingUp ? 'Uploading...' : 'Upload Data Ke Cloud'}
+                                        <button 
+                                            onClick={handleBackupToFirebase}
+                                            disabled={isBackingUp || isSyncing}
+                                            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2"
+                                        >
+                                            <i data-lucide="upload-cloud" className="w-4 h-4"></i>
+                                            {isBackingUp ? 'Memproses...' : 'Kirim Data ke Cloud'}
                                         </button>
-                                        <button onClick={handleRestoreFromFirebase} disabled={isBackingUp || isRestoring} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2">
-                                            <i data-lucide="cloud-download" className="w-4 h-4"></i>
-                                            {isRestoring ? 'Sinkronisasi...' : 'Restore / Ambil Data'}
+                                        <button 
+                                            onClick={handleRestoreFromFirebase}
+                                            disabled={isBackingUp || isSyncing}
+                                            className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-xl font-bold text-xs border border-indigo-500/30 flex items-center justify-center gap-2"
+                                        >
+                                            <i data-lucide="download-cloud" className="w-4 h-4"></i>
+                                            {isSyncing ? 'Mengunduh...' : 'Tarik Data dari Cloud'}
                                         </button>
                                     </div>
                                 </div>
