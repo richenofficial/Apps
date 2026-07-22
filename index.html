@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VeloPOS Pro - Enterprise POS System</title>
     
-    <!-- LINK PWA MANIFEST & METADATA -->
-    <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#6366f1">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1170/1170576.png">
-    
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -110,17 +105,6 @@
 </head>
 <body class="bg-slate-950 text-white font-sans antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>
-
-    <!-- REGISTRASI SERVICE WORKER PWA -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker Registered!', reg))
-                    .catch(err => console.log('Service Worker Fail:', err));
-            });
-        }
-    </script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
@@ -295,9 +279,8 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
-            // State Backup & Sinkronisasi Realtime
+            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
-            const [isSyncing, setIsSyncing] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
             // State Filter Tanggal Laporan
@@ -354,61 +337,10 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
-            // ----------------------------------------------------------------------
-            // SINKRONISASI REALTIME ANTAR-DEVICE
-            // ----------------------------------------------------------------------
-            const syncDataFromCloud = async (cloudData) => {
-                if (!cloudData) return;
-                setIsSyncing(true);
-                try {
-                    await db.transaction('rw', [db.products, db.categories, db.transactions, db.settings], async () => {
-                        if (cloudData.products && Array.isArray(cloudData.products)) {
-                            await db.products.clear();
-                            await db.products.bulkPut(cloudData.products);
-                        }
-                        if (cloudData.categories && Array.isArray(cloudData.categories)) {
-                            await db.categories.clear();
-                            await db.categories.bulkPut(cloudData.categories);
-                        }
-                        if (cloudData.transactions && Array.isArray(cloudData.transactions)) {
-                            await db.transactions.clear();
-                            await db.transactions.bulkPut(cloudData.transactions);
-                        }
-                        if (cloudData.settings && typeof cloudData.settings === 'object') {
-                            await db.settings.put({ ...cloudData.settings, id: 'store_info' });
-                        }
-                    });
-
-                    if (cloudData.updatedAt) {
-                        const formatted = new Date(cloudData.updatedAt).toLocaleString('id-ID');
-                        setLastBackupTime(formatted);
-                        localStorage.setItem('last_backup_time', formatted);
-                    }
-                    await refreshData();
-                } catch (err) {
-                    console.error("Gagal menyinkronkan data dari cloud:", err);
-                } finally {
-                    setIsSyncing(false);
-                }
-            };
-
             useEffect(() => {
                 initSampleData().then(() => {
                     refreshData();
-
-                    // Mendengarkan perubahan data di Firebase secara realtime
-                    const backupRef = firebaseDb.ref('pos_backup');
-                    backupRef.on('value', (snapshot) => {
-                        const data = snapshot.val();
-                        if (data) {
-                            syncDataFromCloud(data);
-                        }
-                    });
                 });
-
-                return () => {
-                    firebaseDb.ref('pos_backup').off();
-                };
             }, []);
 
             const refreshData = async () => {
@@ -451,24 +383,6 @@
                 } finally {
                     setIsBackingUp(false);
                 }
-            };
-
-            const handleRestoreFromFirebase = () => {
-                setIsSyncing(true);
-                firebaseDb.ref('pos_backup').once('value')
-                    .then(snapshot => {
-                        const data = snapshot.val();
-                        if (data) {
-                            syncDataFromCloud(data);
-                            alert("✅ Berhasil menyinkronkan & mengambil data terbaru dari Cloud!");
-                        } else {
-                            alert("Data di Cloud Firebase masih kosong!");
-                        }
-                    })
-                    .catch(err => {
-                        alert("❌ Gagal mengambil data: " + err.message);
-                    })
-                    .finally(() => setIsSyncing(false));
             };
 
             // ----------------------------------------------------------------------
@@ -557,10 +471,12 @@
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
+                    // Load TensorFlow MobileNet model
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
+                    // Deteksi foto objek dari tag video kamera live
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
@@ -569,6 +485,7 @@
                         
                         playBeepSound();
 
+                        // Cari produk yang sesuai dengan keyword hasil prediksi AI
                         const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         
                         let matchedProduct = null;
@@ -577,6 +494,7 @@
                             if (matchedProduct) break;
                         }
 
+                        // Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama atau acak
                         if (!matchedProduct && products.length > 0) {
                             matchedProduct = products[0];
                         }
@@ -793,12 +711,7 @@
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
-                await refreshData();
-
-                // Otomatis update ke Firebase agar device lain langsung tersinkron
-                setTimeout(() => {
-                    handleBackupToFirebase();
-                }, 300);
+                refreshData();
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -842,21 +755,14 @@
                 });
 
                 setIsProductModalOpen(false);
-                await refreshData();
+                refreshData();
                 alert("Produk berhasil disimpan!");
-
-                setTimeout(() => {
-                    handleBackupToFirebase();
-                }, 300);
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
                     await db.products.delete(id);
-                    await refreshData();
-                    setTimeout(() => {
-                        handleBackupToFirebase();
-                    }, 300);
+                    refreshData();
                 }
             };
 
@@ -915,10 +821,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1.5 mt-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                        {isSyncing ? 'Sinkronisasi...' : 'Firebase Connected'}
-                                    </span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold">● Firebase Connected</span>
                                 </div>
                             </div>
 
@@ -945,7 +848,7 @@
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
-                                disabled={isBackingUp || isSyncing}
+                                disabled={isBackingUp}
                                 className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
                                 <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
@@ -1472,29 +1375,19 @@
                                 
                                 <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
                                     <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Sync Realtime (fpos-8da84)
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
                                     </h3>
                                     <p className="text-xs text-slate-300">
-                                        Gunakan tombol di bawah untuk mengirim atau menarik data secara manual antar perangkat.
+                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
                                     </p>
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={handleBackupToFirebase}
-                                            disabled={isBackingUp || isSyncing}
-                                            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
-                                        >
-                                            <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                            {isBackingUp ? 'Proses...' : 'Kirim Ke Cloud'}
-                                        </button>
-                                        <button 
-                                            onClick={handleRestoreFromFirebase}
-                                            disabled={isBackingUp || isSyncing}
-                                            className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-xl font-bold text-xs border border-indigo-500/30 flex items-center justify-center gap-2"
-                                        >
-                                            <i data-lucide="cloud-download" className="w-4 h-4"></i>
-                                            {isSyncing ? 'Mengunduh...' : 'Tarik Dari Cloud'}
-                                        </button>
-                                    </div>
+                                    <button 
+                                        onClick={handleBackupToFirebase}
+                                        disabled={isBackingUp}
+                                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
+                                    >
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i>
+                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
+                                    </button>
                                 </div>
 
                                 <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 max-w-lg shadow-lg">
