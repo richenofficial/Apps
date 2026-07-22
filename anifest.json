@@ -1,0 +1,21 @@
+{
+  "short_name": "VeloPOS",
+  "name": "VeloPOS Pro - Enterprise POS System",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1170/1170576.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1170/1170576.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#020617",
+  "theme_color": "#6366f1",
+  "display": "standalone",
+  "orientation": "any"
+}
