@@ -215,19 +215,20 @@
             }
         }
 
-        // KAMUS KATA KUNCI BAHASA INDONESIA LENGKAP
+        // KAMUS KATA KUNCI BAHASA INDONESIA SUPER LENGKAP
         const AI_TRANSLATION_MAP = {
-            'water bottle': ['aqua', 'mineral', 'minerale', 'susu', 'minuman', 'botol', 'le minerale'],
-            'pop bottle': ['aqua', 'mineral', 'minerale', 'minuman', 'botol', 'le minerale'],
+            'bottle': ['aqua', 'mineral', 'minerale', 'le minerale', 'susu', 'minuman', 'botol', 'teh', 'pucuk', 'cleo', 'coca', 'fanta', 'sprite'],
+            'water bottle': ['aqua', 'mineral', 'minerale', 'le minerale', 'cleo', 'minuman', 'botol'],
+            'pop bottle': ['aqua', 'mineral', 'minerale', 'le minerale', 'minuman', 'coca', 'fanta', 'sprite', 'botol'],
             'beer bottle': ['minuman', 'botol', 'aqua', 'minerale', 'le minerale'],
-            'lotion': ['sabun', 'lifebuoy', 'shampoo', 'pembersih'],
-            'soap dispenser': ['sabun', 'lifebuoy'],
-            'cup': ['minuman', 'susu', 'kopi', 'aqua', 'minerale'],
-            'soup bowl': ['indomie', 'mie', 'makanan', 'goreng'],
-            'packet': ['indomie', 'mie', 'makanan', 'sabun', 'bimoli', 'sembako'],
-            'carton': ['susu', 'ultra', 'milk', 'makanan', 'minuman'],
-            'bag': ['bimoli', 'minyak', 'sembako', 'makanan'],
-            'bottle': ['aqua', 'minerale', 'minuman', 'minyak', 'bimoli', 'susu', 'le minerale']
+            'cup': ['minuman', 'susu', 'kopi', 'aqua', 'minerale', 'teh'],
+            'coffee mug': ['kopi', 'susu', 'minuman'],
+            'soup bowl': ['indomie', 'mie', 'makanan', 'pop mie', 'sedaap', 'goreng', 'rebus'],
+            'packet': ['indomie', 'mie', 'makanan', 'sabun', 'bimoli', 'sembako', 'snack', 'sedaap'],
+            'carton': ['susu', 'ultra', 'milk', 'makanan', 'minuman', 'teh kotak'],
+            'bag': ['bimoli', 'minyak', 'sembako', 'makanan', 'beras', 'gula'],
+            'lotion': ['sabun', 'lifebuoy', 'shampoo', 'pembersih', 'giv', 'lux'],
+            'soap dispenser': ['sabun', 'lifebuoy', 'pembersih']
         };
 
         // ----------------------------------------------------------------------
@@ -368,7 +369,7 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
-            // Preload AI Model di background
+            // Preload AI Model secara rahasia
             useEffect(() => {
                 if (typeof mobilenet !== 'undefined' && !aiModelRef.current) {
                     mobilenet.load().then(model => {
@@ -491,7 +492,7 @@
                     .finally(() => setIsSyncing(false));
             };
 
-            // SCANNER BARCODE KAMERA STABIL
+            // SCANNER BARCODE KAMERA STABIL (ANTI-BLANK)
             useEffect(() => {
                 let scannerInstance = null;
                 if (isScannerOpen) {
@@ -536,7 +537,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN PENCOCOKAN KATEGORI & KATA KUNCI MULTI-STAGE
+            // VISUAL SCAN AI AKURAT SANGAT TINGGI (CANVAS SNAPSHOT + MULTI-STAGE MATCHING)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -561,6 +562,13 @@
 
             const handleCaptureAndDetectAi = async () => {
                 if (!visualVideoRef.current) return;
+                const video = visualVideoRef.current;
+                
+                if (video.readyState !== 4) {
+                    alert("Kamera sedang menyiapkan gambar, silakan tekan sekali lagi.");
+                    return;
+                }
+
                 setIsAiLoading(true);
 
                 try {
@@ -568,27 +576,33 @@
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    const predictions = await aiModelRef.current.classify(visualVideoRef.current);
+                    // Ambil tangkapan layar jernih via Canvas
+                    const canvas = document.createElement("canvas");
+                    canvas.width = video.videoWidth || 300;
+                    canvas.height = video.videoHeight || 300;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    const predictions = await aiModelRef.current.classify(canvas);
                     
                     if (predictions && predictions.length > 0) {
-                        const rawPrediction = predictions[0].className.toLowerCase();
+                        // Gabungkan 3 kata prediksi teratas
+                        const allPredictedTags = predictions.map(p => p.className.toLowerCase()).join(' ');
                         
-                        // 1. Ambil kata kunci dari kamus terjemahan
-                        let translationTerms = [];
+                        // Cari kata kunci Bahasa Indonesia
+                        let indoKeywords = [];
                         Object.keys(AI_TRANSLATION_MAP).forEach(engKey => {
-                            if (rawPrediction.includes(engKey)) {
-                                translationTerms = [...translationTerms, ...AI_TRANSLATION_MAP[engKey]];
+                            if (allPredictedTags.includes(engKey)) {
+                                indoKeywords = [...indoKeywords, ...AI_TRANSLATION_MAP[engKey]];
                             }
                         });
 
-                        // 2. Ambil kata individu dari nama prediksi mentah
-                        const rawWords = rawPrediction.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-                        const searchTerms = [...translationTerms, ...rawWords];
+                        const rawWords = allPredictedTags.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+                        const searchTerms = [...new Set([...rawWords, ...indoKeywords])];
 
-                        // 3. Pencocokan Pintar Multi-Stage
                         let matchedProduct = null;
 
-                        // Stage A: Cari kata kunci spesifik di Nama Produk atau Kategori
+                        // Stage 1: Pencocokan Kata Kunci Spesifik di Nama Produk / Kategori
                         for (let term of searchTerms) {
                             if (!term) continue;
                             matchedProduct = products.find(p => 
@@ -598,21 +612,17 @@
                             if (matchedProduct) break;
                         }
 
-                        // Stage B: Pencocokan Berdasarkan Bentuk Objek / Kelompok Produk
+                        // Stage 2: Pencocokan Berdasarkan Bentuk Umum Objek
                         if (!matchedProduct) {
-                            const isLiquidOrBottle = /bottle|jug|can|flask|drink|beverage|liquid|water|pop/i.test(rawPrediction);
-                            const isFoodOrPacket = /bowl|soup|noodle|packet|wrapper|snack|bread|box|bag|food/i.test(rawPrediction);
-                            const isSoapOrLotion = /soap|lotion|cleaner|detergent|dispenser|spray/i.test(rawPrediction);
-
-                            if (isLiquidOrBottle) {
+                            if (/bottle|water|drink|beverage|jug|can|flask|pop/i.test(allPredictedTags)) {
                                 matchedProduct = products.find(p => p.category && p.category.toLowerCase().includes('minuman')) ||
-                                                 products.find(p => /aqua|mineral|minerale|susu|tea|teh|kopi|jus/i.test(p.name));
-                            } else if (isFoodOrPacket) {
+                                                 products.find(p => /aqua|mineral|minerale|susu|tea|teh|kopi|jus|minuman/i.test(p.name.toLowerCase()));
+                            } else if (/packet|bowl|soup|noodle|wrapper|snack|box|bag|food|bread/i.test(allPredictedTags)) {
                                 matchedProduct = products.find(p => p.category && (p.category.toLowerCase().includes('makanan') || p.category.toLowerCase().includes('sembako'))) ||
-                                                 products.find(p => /indomie|mie|makanan|roti|snack/i.test(p.name));
-                            } else if (isSoapOrLotion) {
+                                                 products.find(p => /indomie|mie|makanan|roti|snack|bimoli/i.test(p.name.toLowerCase()));
+                            } else if (/soap|lotion|cleaner|detergent|dispenser|tube|tissue/i.test(allPredictedTags)) {
                                 matchedProduct = products.find(p => p.category && p.category.toLowerCase().includes('kebutuhan')) ||
-                                                 products.find(p => /sabun|shampoo|lifebuoy/i.test(p.name));
+                                                 products.find(p => /sabun|shampoo|lifebuoy|tisu/i.test(p.name.toLowerCase()));
                             }
                         }
 
@@ -623,10 +633,11 @@
                             setIsAiLoading(false);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Bentuk/objek terdeteksi (${rawPrediction}), namun belum cocok dengan produk di toko Anda. Silakan dekatkan foto produk.`);
+                            alert(`Objek terdeteksi (${predictions[0].className}), tetapi belum ada barang sejenis yang cocok di menu "Daftar Produk" Anda.`);
                         }
                     } else {
                         setIsAiLoading(false);
+                        alert("Objek kurang jelas, dekatkan posisi foto produk.");
                     }
                 } catch (error) {
                     setIsAiLoading(false);
