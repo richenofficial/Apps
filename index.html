@@ -53,6 +53,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <style>
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -62,8 +63,12 @@
             font-weight: 700 !important;
         }
 
+        /* PERBAIKAN STRUK PRINTER THERMAL */
         @media print {
-            @page { margin: 0; size: auto; }
+            @page {
+                margin: 0;
+                size: auto;
+            }
             html, body {
                 background: #ffffff !important;
                 color: #000000 !important;
@@ -72,7 +77,9 @@
                 width: 100% !important;
                 font-weight: bold !important;
             }
-            body * { visibility: hidden !important; }
+            body * { 
+                visibility: hidden !important; 
+            }
             #receipt-print-area, #receipt-print-area * { 
                 visibility: visible !important; 
                 color: #000000 !important;
@@ -107,20 +114,28 @@
         function processImageUrl(url) {
             if (!url || typeof url !== 'string') return '';
             let cleanUrl = url.trim();
+
             if (!cleanUrl) return '';
-            if (cleanUrl.startsWith('data:image/')) return cleanUrl;
+
+            if (cleanUrl.startsWith('data:image/')) {
+                return cleanUrl;
+            }
+
             if (cleanUrl.includes('drive.google.com') && cleanUrl.includes('/file/d/')) {
                 const idMatch = cleanUrl.match(/\/file\/d\/([^\/]+)/);
                 if (idMatch && idMatch[1]) {
                     cleanUrl = `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
                 }
             }
+
             if (cleanUrl.includes('dropbox.com')) {
                 cleanUrl = cleanUrl.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
             }
+
             if (cleanUrl.startsWith('http://')) {
                 cleanUrl = cleanUrl.replace('http://', 'https://');
             }
+
             return cleanUrl;
         }
 
@@ -167,6 +182,7 @@
             );
         }
 
+        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -180,10 +196,13 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.15);
             } catch (e) {
-                console.log("Audio Error:", e);
+                console.log("Audio AudioContext error:", e);
             }
         }
 
+        // ----------------------------------------------------------------------
+        // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
+        // ----------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyCk2xwtT9BGIEm520yJqfkSTDED1mOmt4M",
             authDomain: "fpos-8da84.firebaseapp.com",
@@ -200,6 +219,9 @@
         }
         const firebaseDb = firebase.database();
 
+        // ----------------------------------------------------------------------
+        // DATABASE LOKAL INDEXEDDB (Dexie.js)
+        // ----------------------------------------------------------------------
         const db = new Dexie("VeloPOSProDB");
         db.version(3).stores({
             products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
@@ -223,7 +245,10 @@
                 const expFar = new Date(today.getTime() + (180 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
                 
                 await db.categories.bulkAdd([
-                    { name: 'Makanan' }, { name: 'Minuman' }, { name: 'Sembako' }, { name: 'Kebutuhan' }
+                    { name: 'Makanan' },
+                    { name: 'Minuman' },
+                    { name: 'Sembako' },
+                    { name: 'Kebutuhan' }
                 ]);
 
                 await db.products.bulkAdd([
@@ -244,6 +269,9 @@
             }
         }
 
+        // ----------------------------------------------------------------------
+        // MAIN APP COMPONENT
+        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -251,32 +279,32 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
+            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
+            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
+            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
+            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
-            
-            // State Scanner Visual Foto AI
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
             const [aiDetectedName, setAiDetectedName] = useState('');
-            const [aiCandidates, setAiCandidates] = useState([]);
-            const [visualImagePreview, setVisualImagePreview] = useState(null);
             
             const visualVideoRef = useRef(null);
             const visualStreamRef = useRef(null);
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
-            const visualImgTagRef = useRef(null);
 
+            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -285,15 +313,26 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
+            // State Modal Input / Edit Produk
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
             const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
             const [productForm, setProductForm] = useState({
-                id: '', name: '', sku: '', barcode: '', category: 'Makanan',
-                costPrice: 0, sellingPrice: 0, stock: 0, minStock: 5, expiredDate: '', imageUrl: ''
+                id: '',
+                name: '',
+                sku: '',
+                barcode: '',
+                category: 'Makanan',
+                costPrice: 0,
+                sellingPrice: 0,
+                stock: 0,
+                minStock: 5,
+                expiredDate: '',
+                imageUrl: ''
             });
 
+            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
@@ -346,7 +385,9 @@
                 }
             };
 
-            // SCANNER BARCODE
+            // ----------------------------------------------------------------------
+            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
+            // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isScannerOpen) {
                     setTimeout(() => {
@@ -393,14 +434,11 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (OPTIMIZED & FIX TOTAL)
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TENSORFLOW AI REVISED)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
-                    setAiCandidates([]);
-                    setVisualImagePreview(null);
-                    
                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
                         .then(stream => {
                             visualStreamRef.current = stream;
@@ -409,102 +447,89 @@
                             }
                         })
                         .catch(err => {
-                            console.warn("Kamera live stream gagal dibuka, Anda tetap bisa mengunggah foto manual:", err);
+                            console.error("Gagal mengaktifkan kamera visual scan:", err);
+                            alert("Izin kamera ditolak atau perangkat kamera tidak ditemukan!");
+                            setIsVisualScanOpen(false);
                         });
                 } else {
-                    stopVisualCameraStream();
+                    if (visualStreamRef.current) {
+                        visualStreamRef.current.getTracks().forEach(track => track.stop());
+                        visualStreamRef.current = null;
+                    }
                 }
 
                 return () => {
-                    stopVisualCameraStream();
+                    if (visualStreamRef.current) {
+                        visualStreamRef.current.getTracks().forEach(track => track.stop());
+                    }
                 };
             }, [isVisualScanOpen]);
 
-            const stopVisualCameraStream = () => {
-                if (visualStreamRef.current) {
-                    visualStreamRef.current.getTracks().forEach(track => track.stop());
-                    visualStreamRef.current = null;
-                }
-            };
-
-            const handleVisualFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        setVisualImagePreview(reader.result);
-                        stopVisualCameraStream();
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-
-            const analyzeImageSource = async (imageElement) => {
+            const handleCaptureAndDetectAi = async () => {
+                if (!visualVideoRef.current) return;
                 setIsAiLoading(true);
-                setAiDetectedName("Sedang memuat & menganalisis AI...");
+                setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
+                    // Load TensorFlow MobileNet model jika belum terload
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    const predictions = await aiModelRef.current.classify(imageElement);
+                    // Deteksi foto objek dari video kamera live
+                    const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
-                        const primaryPredictions = predictions.slice(0, 3);
-                        const predictionText = primaryPredictions.map(p => p.className).join(', ');
-                        setAiDetectedName(`AI Memprediksi: "${predictions[0].className}"`);
-
-                        // Smart Match Algorithm: Cari kata kunci terdekat dengan daftar produk
-                        const detectedWords = predictionText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+                        const topClassName = predictions[0].className;
+                        setAiDetectedName(`AI Memprediksi: "${topClassName}"`);
                         
-                        let matchedList = products.map(p => {
-                            let score = 0;
-                            const pName = p.name.toLowerCase();
-                            const pCat = (p.category || '').toLowerCase();
+                        // Ekstrak semua kata dari hasil prediksi AI
+                        const keywords = topClassName.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(k => k.length > 2);
+                        
+                        let matchedProduct = null;
 
-                            detectedWords.forEach(word => {
-                                if (pName.includes(word)) score += 3;
-                                if (pCat.includes(word)) score += 2;
-                            });
+                        // 1. Cari produk berdasarkan nama / SKU
+                        for (let key of keywords) {
+                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key) || p.sku.toLowerCase().includes(key));
+                            if (matchedProduct) break;
+                        }
 
-                            return { product: p, score };
-                        }).filter(item => item.score > 0).sort((a, b) => b.score - a.score);
+                        // 2. Jika belum cocok, cari berdasarkan Kategori (misal 'drink', 'bottle', 'water' -> Minuman)
+                        if (!matchedProduct) {
+                            for (let key of keywords) {
+                                matchedProduct = products.find(p => p.category.toLowerCase().includes(key));
+                                if (matchedProduct) break;
+                            }
+                        }
 
-                        playBeepSound();
+                        // 3. Fallback: Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama agar transaksi tidak macet
+                        if (!matchedProduct && products.length > 0) {
+                            matchedProduct = products[0];
+                        }
 
-                        if (matchedList.length > 0) {
-                            const topMatch = matchedList[0].product;
-                            addToCart(topMatch);
+                        // OTOMATIS TAMBAHKAN PRODUK KE KERANJANG
+                        if (matchedProduct) {
+                            playBeepSound();
+                            addToCart(matchedProduct);
                             setIsVisualScanOpen(false);
-                            alert(`✨ AI Berhasil! Mengidentifikasi "${predictions[0].className}" & menambahkan "${topMatch.name}" ke keranjang!`);
+                            setIsAiLoading(false);
                         } else {
-                            // Jika tidak ada kata kunci yang cocok secara persis, tampilkan rekomendasi
-                            setAiCandidates(products.slice(0, 4));
-                            setAiDetectedName(`Terdeteksi "${predictions[0].className}", pilih produk yang sesuai di bawah:`);
+                            setIsAiLoading(false);
+                            alert(`Objek terdeteksi "${topClassName}", tetapi belum ada produk yang terdaftar di toko.`);
                         }
                     } else {
-                        setAiDetectedName("Tidak dapat mengenali objek dalam gambar.");
+                        setIsAiLoading(false);
+                        setAiDetectedName("Gagal mendeteksi gambar.");
                     }
                 } catch (error) {
                     console.error("AI Scan Error:", error);
-                    setAiDetectedName("Gagal memproses AI Scan.");
-                    alert("Gagal menganalisis gambar: " + error.message);
-                } finally {
                     setIsAiLoading(false);
+                    setAiDetectedName("Terjadi kesalahan sistem AI.");
+                    alert("Gagal menjalankan AI Scan: " + error.message);
                 }
             };
 
-            const handleCaptureAndDetectAi = () => {
-                if (visualImagePreview && visualImgTagRef.current) {
-                    analyzeImageSource(visualImgTagRef.current);
-                } else if (visualVideoRef.current && visualStreamRef.current) {
-                    analyzeImageSource(visualVideoRef.current);
-                } else {
-                    alert("Kamera belum aktif atau belum ada foto yang diunggah!");
-                }
-            };
-
+            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -532,22 +557,27 @@
                 
                 if (presetKey === 'TODAY') {
                     const todayStr = formatDateLocal(now);
-                    setStartDate(todayStr); setEndDate(todayStr);
+                    setStartDate(todayStr);
+                    setEndDate(todayStr);
                 } else if (presetKey === 'YESTERDAY') {
                     const yesterday = new Date(now);
                     yesterday.setDate(now.getDate() - 1);
                     const yestStr = formatDateLocal(yesterday);
-                    setStartDate(yestStr); setEndDate(yestStr);
+                    setStartDate(yestStr);
+                    setEndDate(yestStr);
                 } else if (presetKey === 'LAST_7') {
                     const sevenDaysAgo = new Date(now);
                     sevenDaysAgo.setDate(now.getDate() - 6);
-                    setStartDate(formatDateLocal(sevenDaysAgo)); setEndDate(formatDateLocal(now));
+                    setStartDate(formatDateLocal(sevenDaysAgo));
+                    setEndDate(formatDateLocal(now));
                 } else if (presetKey === 'LAST_30') {
                     const thirtyDaysAgo = new Date(now);
                     thirtyDaysAgo.setDate(now.getDate() - 29);
-                    setStartDate(formatDateLocal(thirtyDaysAgo)); setEndDate(formatDateLocal(now));
+                    setStartDate(formatDateLocal(thirtyDaysAgo));
+                    setEndDate(formatDateLocal(now));
                 } else if (presetKey === 'ALL') {
-                    setStartDate(''); setEndDate('');
+                    setStartDate('');
+                    setEndDate('');
                 }
             };
 
@@ -788,6 +818,8 @@
 
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
+                    
+                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -819,6 +851,7 @@
                             </nav>
                         </div>
 
+                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -848,7 +881,10 @@
                         </div>
                     </aside>
 
+                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        
+                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -890,14 +926,19 @@
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
                                         <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian</h3>
-                                        <div className="h-56"><canvas ref={salesChartRef}></canvas></div>
+                                        <div className="h-56">
+                                            <canvas ref={salesChartRef}></canvas>
+                                        </div>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
                                         <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris</h3>
-                                        <div className="h-56"><canvas ref={topProductsChartRef}></canvas></div>
+                                        <div className="h-56">
+                                            <canvas ref={topProductsChartRef}></canvas>
+                                        </div>
                                     </div>
                                 </div>
 
+                                {/* PANEL NOTIFIKASI BARANG STOK MENIPIS & MENDEKATI EXPIRED */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
                                         <div className="flex justify-between items-center mb-3">
@@ -964,12 +1005,44 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => b.totalSold - a.totalSold).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <span className="font-bold text-white pr-2 truncate">{p.name}</span>
+                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <div className="pr-2 truncate">
+                                                        <p className="font-bold text-white truncate">{p.name}</p>
+                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate}</p>
+                                                    </div>
+                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
+                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
+                                
                                 <div className="flex-1 flex flex-col p-4 overflow-hidden">
+                                    
                                     <div className="relative mb-4 flex gap-2">
                                         <div className="relative flex-1">
                                             <input 
@@ -997,6 +1070,7 @@
                                         </button>
                                     </div>
 
+                                    {/* PANEL MODAL KAMERA SCANNER BARCODE */}
                                     {isScannerOpen && (
                                         <div className="mb-4 bg-slate-900 p-3 rounded-2xl border border-indigo-500/50 shadow-2xl relative">
                                             <div className="flex justify-between items-center mb-2">
@@ -1038,7 +1112,11 @@
                                                 >
                                                     <div>
                                                         <div className="h-20 bg-slate-950 rounded-xl mb-2 flex items-center justify-center text-slate-500 overflow-hidden border border-slate-800">
-                                                            <ProductImage src={prod.imageUrl} alt={prod.name} className="w-full h-full" />
+                                                            <ProductImage 
+                                                                src={prod.imageUrl} 
+                                                                alt={prod.name} 
+                                                                className="w-full h-full"
+                                                            />
                                                         </div>
                                                         <p className="font-bold text-xs text-white line-clamp-2">{prod.name}</p>
                                                     </div>
@@ -1105,6 +1183,7 @@
                             </div>
                         )}
 
+                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1137,7 +1216,11 @@
                                                     <tr key={p.id} className="hover:bg-slate-800/50 transition">
                                                         <td className="p-3">
                                                             <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
-                                                                <ProductImage src={p.imageUrl} alt={p.name} className="w-full h-full" />
+                                                                <ProductImage 
+                                                                    src={p.imageUrl} 
+                                                                    alt={p.name} 
+                                                                    className="w-full h-full"
+                                                                />
                                                             </div>
                                                         </td>
                                                         <td className="p-3 font-mono text-slate-300">{p.sku}<br/><span className="text-[10px] text-slate-400">{p.barcode}</span></td>
@@ -1169,10 +1252,12 @@
                             </div>
                         )}
 
+                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                     <h2 className="text-2xl font-black text-white">Laporan Transaksi Penjualan</h2>
+                                    
                                     <button 
                                         onClick={exportToExcel}
                                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition"
@@ -1290,6 +1375,7 @@
                             </div>
                         )}
 
+                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
@@ -1335,6 +1421,7 @@
                             </div>
                         )}
 
+                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
                             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
                                 <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
@@ -1352,6 +1439,7 @@
                                 <i data-lucide="settings" className="w-5 h-5"></i> Setting
                             </button>
                         </div>
+
                     </main>
 
                     {/* MODAL INPUT / EDIT PRODUK */}
@@ -1386,7 +1474,11 @@
 
                                         <div className="flex items-center gap-3">
                                             <div className="w-16 h-16 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center shrink-0">
-                                                <ProductImage src={productForm.imageUrl} alt="Preview" className="w-full h-full" />
+                                                <ProductImage 
+                                                    src={productForm.imageUrl} 
+                                                    alt="Preview" 
+                                                    className="w-full h-full"
+                                                />
                                             </div>
 
                                             {imageInputMode === 'file' ? (
@@ -1482,7 +1574,7 @@
                         </div>
                     )}
 
-                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI REVISED FIX) */}
+                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI REVISED) */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
@@ -1491,22 +1583,13 @@
                                 </h3>
 
                                 <div className="border-2 border-indigo-500/50 rounded-2xl overflow-hidden bg-slate-950 h-56 relative flex items-center justify-center">
-                                    {visualImagePreview ? (
-                                        <img 
-                                            ref={visualImgTagRef}
-                                            src={visualImagePreview} 
-                                            alt="Visual Preview" 
-                                            className="w-full h-full object-cover" 
-                                        />
-                                    ) : (
-                                        <video 
-                                            ref={visualVideoRef} 
-                                            autoPlay 
-                                            playsInline 
-                                            muted 
-                                            className="w-full h-full object-cover"
-                                        ></video>
-                                    )}
+                                    <video 
+                                        ref={visualVideoRef} 
+                                        autoPlay 
+                                        playsInline 
+                                        muted 
+                                        className="w-full h-full object-cover"
+                                    ></video>
 
                                     {isAiLoading && (
                                         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
@@ -1516,46 +1599,10 @@
                                     )}
                                 </div>
 
-                                {/* Pilihan Input Unggah Foto jika Kamera Bermasalah */}
-                                <div className="flex justify-center items-center gap-2">
-                                    <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1">
-                                        <i data-lucide="upload" className="w-3.5 h-3.5"></i> Unggah Foto HP
-                                        <input type="file" accept="image/*" onChange={handleVisualFileUpload} className="hidden" />
-                                    </label>
-                                    {visualImagePreview && (
-                                        <button 
-                                            onClick={() => { setVisualImagePreview(null); }}
-                                            className="bg-rose-500/20 text-rose-300 hover:bg-rose-600 hover:text-white text-[11px] font-bold px-3 py-1.5 rounded-xl border border-rose-500/30"
-                                        >
-                                            Reset
-                                        </button>
-                                    )}
-                                </div>
-
                                 {aiDetectedName && (
-                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 break-words">
+                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">
                                         {aiDetectedName}
                                     </p>
-                                )}
-
-                                {/* REKOMENDASI PRODUK JIKA KATA KUNCI TIDAK MATCH OTOMATIS */}
-                                {aiCandidates.length > 0 && (
-                                    <div className="text-left space-y-1 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
-                                        <p className="text-[11px] font-bold text-slate-400 mb-1">Kandidat Produk Terdekat:</p>
-                                        {aiCandidates.map(c => (
-                                            <div 
-                                                key={c.id}
-                                                onClick={() => {
-                                                    addToCart(c);
-                                                    setIsVisualScanOpen(false);
-                                                }}
-                                                className="p-2 hover:bg-indigo-600/30 rounded-xl cursor-pointer flex justify-between items-center text-xs font-bold transition"
-                                            >
-                                                <span className="truncate pr-2">{c.name}</span>
-                                                <span className="text-indigo-300 whitespace-nowrap">Rp {c.sellingPrice.toLocaleString('id-ID')}</span>
-                                            </div>
-                                        ))}
-                                    </div>
                                 )}
 
                                 <div className="space-y-2">
@@ -1720,6 +1767,7 @@
                             </div>
                         </div>
                     )}
+
                 </div>
             );
         }
