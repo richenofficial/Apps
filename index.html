@@ -198,7 +198,6 @@
             );
         }
 
-        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -354,6 +353,16 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
+            // Preload AI Model secara rahasia begitu aplikasi dimulai
+            useEffect(() => {
+                if (typeof mobilenet !== 'undefined' && !aiModelRef.current) {
+                    mobilenet.load().then(model => {
+                        aiModelRef.current = model;
+                        console.log("⚡ AI Engine Siap Instan!");
+                    }).catch(e => console.log("Gagal preload AI:", e));
+                }
+            }, []);
+
             // ----------------------------------------------------------------------
             // SINKRONISASI REALTIME ANTAR-DEVICE
             // ----------------------------------------------------------------------
@@ -396,7 +405,6 @@
                 initSampleData().then(() => {
                     refreshData();
 
-                    // Mendengarkan perubahan data di Firebase secara realtime
                     const backupRef = firebaseDb.ref('pos_backup');
                     backupRef.on('value', (snapshot) => {
                         const data = snapshot.val();
@@ -472,20 +480,21 @@
             };
 
             // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
+            // 1. LOGIKA SCANNER BARCODE STABIL (ANTI BLANK HITAM)
             // ----------------------------------------------------------------------
             useEffect(() => {
+                let scannerInstance = null;
                 if (isScannerOpen) {
-                    setTimeout(() => {
-                        const readerElem = document.getElementById("reader");
-                        if (!readerElem) return;
+                    const timer = setTimeout(() => {
+                        const element = document.getElementById("reader");
+                        if (!element) return;
 
-                        const html5QrCode = new Html5Qrcode("reader");
-                        html5QrCodeRef.current = html5QrCode;
+                        scannerInstance = new Html5Qrcode("reader");
+                        html5QrCodeRef.current = scannerInstance;
 
-                        html5QrCode.start(
+                        scannerInstance.start(
                             { facingMode: "environment" },
-                            { fps: 15, qrbox: { width: 250, height: 150 } },
+                            { fps: 20, qrbox: { width: 250, height: 150 } },
                             (decodedText) => {
                                 playBeepSound();
                                 const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
@@ -493,34 +502,32 @@
                                     addToCart(found);
                                     setIsScannerOpen(false);
                                 } else {
-                                    alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
+                                    alert(`Barcode "${decodedText}" tidak terdaftar di database!`);
                                     setIsScannerOpen(false);
                                 }
                             },
                             () => {}
                         ).catch(err => {
-                            console.error("Gagal membuka kamera barcode:", err);
-                            alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
+                            console.error("Scanner Error:", err);
                             setIsScannerOpen(false);
                         });
-                    }, 300);
+                    }, 200);
+
+                    return () => clearTimeout(timer);
                 } else {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
-                        }).catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        if (html5QrCodeRef.current.isScanning) {
+                            html5QrCodeRef.current.stop().then(() => {
+                                html5QrCodeRef.current.clear();
+                                html5QrCodeRef.current = null;
+                            }).catch(() => {});
+                        }
                     }
                 }
-
-                return () => {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().catch(e => console.log(e));
-                    }
-                };
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
+            // 2. LOGIKA VISUAL SCAN INSTAN
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -533,8 +540,7 @@
                             }
                         })
                         .catch(err => {
-                            console.error("Gagal mengaktifkan kamera visual scan:", err);
-                            alert("Izin kamera ditolak atau perangkat kamera tidak ditemukan!");
+                            alert("Kamera tidak diizinkan atau tidak ditemukan!");
                             setIsVisualScanOpen(false);
                         });
                 } else {
@@ -543,18 +549,11 @@
                         visualStreamRef.current = null;
                     }
                 }
-
-                return () => {
-                    if (visualStreamRef.current) {
-                        visualStreamRef.current.getTracks().forEach(track => track.stop());
-                    }
-                };
             }, [isVisualScanOpen]);
 
             const handleCaptureAndDetectAi = async () => {
                 if (!visualVideoRef.current) return;
                 setIsAiLoading(true);
-                setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
                     if (!aiModelRef.current) {
@@ -565,12 +564,9 @@
                     
                     if (predictions && predictions.length > 0) {
                         const topPrediction = predictions[0].className;
-                        setAiDetectedName(`AI Memprediksi: "${topPrediction}"`);
-                        
                         playBeepSound();
 
                         const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
-                        
                         let matchedProduct = null;
                         for (let key of keywords) {
                             matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
@@ -582,25 +578,19 @@
                         }
 
                         if (matchedProduct) {
-                            setTimeout(() => {
-                                addToCart(matchedProduct);
-                                setIsVisualScanOpen(false);
-                                setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
-                            }, 600);
+                            addToCart(matchedProduct);
+                            setIsVisualScanOpen(false);
+                            setIsAiLoading(false);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama produk di toko Anda.`);
+                            alert(`Objek "${topPrediction}" terdeteksi, tetapi tidak ada di daftar produk.`);
                         }
                     } else {
                         setIsAiLoading(false);
-                        setAiDetectedName("Gagal mendeteksi gambar.");
                     }
                 } catch (error) {
-                    console.error("AI Scan Error:", error);
                     setIsAiLoading(false);
-                    setAiDetectedName("Terjadi kesalahan sistem AI.");
-                    alert("Gagal menjalankan AI Scan: " + error.message);
+                    alert("Gagal scan AI: " + error.message);
                 }
             };
 
@@ -795,7 +785,6 @@
                 setCashPaid('');
                 await refreshData();
 
-                // Otomatis update ke Firebase agar device lain langsung tersinkron
                 setTimeout(() => {
                     handleBackupToFirebase();
                 }, 300);
@@ -1160,7 +1149,7 @@
                                         </button>
                                     </div>
 
-                                    {/* PANEL MODAL KAMERA SCANNER BARCODE */}
+                                    {/* PANEL MODAL KAMERA SCANNER BARCODE STABIL */}
                                     {isScannerOpen && (
                                         <div className="mb-4 bg-slate-900 p-3 rounded-2xl border border-indigo-500/50 shadow-2xl relative">
                                             <div className="flex justify-between items-center mb-2">
@@ -1674,12 +1663,12 @@
                         </div>
                     )}
 
-                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI) */}
+                    {/* MODAL SCAN VISUAL FOTO PRODUK INSTAN */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
                                 <h3 className="font-bold text-white text-sm flex items-center justify-center gap-2">
-                                    <i data-lucide="camera" className="w-4 h-4 text-indigo-400"></i> Visual Scan AI Foto Produk
+                                    <i data-lucide="camera" className="w-4 h-4 text-indigo-400"></i> Visual Scan AI Produk
                                 </h3>
 
                                 <div className="border-2 border-indigo-500/50 rounded-2xl overflow-hidden bg-slate-950 h-56 relative flex items-center justify-center">
@@ -1694,16 +1683,10 @@
                                     {isAiLoading && (
                                         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
                                             <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                                            <p className="text-xs font-bold text-indigo-300 animate-pulse">Proses Identifikasi AI...</p>
+                                            <p className="text-xs font-bold text-indigo-300 animate-pulse">Menambah Ke Keranjang...</p>
                                         </div>
                                     )}
                                 </div>
-
-                                {aiDetectedName && (
-                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">
-                                        {aiDetectedName}
-                                    </p>
-                                )}
 
                                 <div className="space-y-2">
                                     <button 
@@ -1712,7 +1695,7 @@
                                         className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="sparkles" className="w-4 h-4"></i>
-                                        {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
+                                        Scan Instan Ke Keranjang
                                     </button>
                                     <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
                                         Tutup
