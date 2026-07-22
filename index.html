@@ -211,9 +211,26 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.15);
             } catch (e) {
-                console.log("Audio AudioContext error:", e);
+                console.log("Audio Context error:", e);
             }
         }
+
+        // ----------------------------------------------------------------------
+        // KAMUS PENERJEMAH VISUAL AI (ENGLISH -> KATA KUNCI BAHASA INDONESIA)
+        // ----------------------------------------------------------------------
+        const AI_TRANSLATION_MAP = {
+            'water bottle': ['aqua', 'mineral', 'minerale', 'susu', 'minuman', 'botol', 'susu ultra'],
+            'pop bottle': ['aqua', 'mineral', 'minerale', 'minuman', 'botol'],
+            'beer bottle': ['minuman', 'botol', 'aqua', 'minerale'],
+            'lotion': ['sabun', 'lifebuoy', 'shampoo', 'pembersih'],
+            'soap dispenser': ['sabun', 'lifebuoy'],
+            'cup': ['minuman', 'susu', 'kopi', 'aqua'],
+            'soup bowl': ['indomie', 'mie', 'makanan', 'goreng'],
+            'packet': ['indomie', 'mie', 'makanan', 'sabun', 'bimoli', 'sembako'],
+            'carton': ['susu', 'ultra', 'milk', 'makanan', 'minuman'],
+            'bag': ['bimoli', 'minyak', 'sembako', 'makanan'],
+            'bottle': ['aqua', 'minerale', 'minuman', 'minyak', 'bimoli', 'susu']
+        };
 
         // ----------------------------------------------------------------------
         // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
@@ -480,7 +497,7 @@
             };
 
             // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE STABIL (ANTI BLANK HITAM)
+            // 1. LOGIKA SCANNER BARCODE STABIL
             // ----------------------------------------------------------------------
             useEffect(() => {
                 let scannerInstance = null;
@@ -527,7 +544,7 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN INSTAN
+            // 2. LOGIKA VISUAL SCAN AKURAT BAHASA INDONESIA (TENSORFLOW AI PINTAR)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -563,30 +580,42 @@
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
-                        const topPrediction = predictions[0].className;
-                        playBeepSound();
+                        const rawPrediction = predictions[0].className.toLowerCase();
+                        
+                        // Cari padanan kata kunci Bahasa Indonesia dari kamus
+                        let indoKeywords = [];
+                        Object.keys(AI_TRANSLATION_MAP).forEach(engKey => {
+                            if (rawPrediction.includes(engKey)) {
+                                indoKeywords = [...indoKeywords, ...AI_TRANSLATION_MAP[engKey]];
+                            }
+                        });
 
-                        const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
+                        // Gabungkan kata prediksi mentah + terjemahan indonesia
+                        const searchTerms = [...rawPrediction.split(','), ...indoKeywords].map(k => k.trim());
+
+                        // Pencocokan produk secara presisi berdasarkan Nama / Kategori
                         let matchedProduct = null;
-                        for (let key of keywords) {
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
+                        for (let term of searchTerms) {
+                            if (!term) continue;
+                            matchedProduct = products.find(p => 
+                                p.name.toLowerCase().includes(term) || 
+                                (p.category && p.category.toLowerCase().includes(term))
+                            );
                             if (matchedProduct) break;
                         }
 
-                        if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
-                        }
-
                         if (matchedProduct) {
+                            playBeepSound();
                             addToCart(matchedProduct);
                             setIsVisualScanOpen(false);
                             setIsAiLoading(false);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek "${topPrediction}" terdeteksi, tetapi tidak ada di daftar produk.`);
+                            alert(`Objek terdeteksi "${rawPrediction}", namun tidak ada produk sejenis yang cocok di database toko Anda.`);
                         }
                     } else {
                         setIsAiLoading(false);
+                        alert("Objek tidak dapat dikenali, silakan coba dekatkan posisi foto.");
                     }
                 } catch (error) {
                     setIsAiLoading(false);
@@ -1098,7 +1127,7 @@
                                         </div>
                                     </div>
 
-                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                    <div className="bg-slate-900 border border-rose-300 mb-3">
                                         <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
                                         <div className="space-y-2">
                                             {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
