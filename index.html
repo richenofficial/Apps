@@ -471,12 +471,10 @@
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
-                    // Load TensorFlow MobileNet model
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    // Deteksi foto objek dari tag video kamera live
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
@@ -485,7 +483,6 @@
                         
                         playBeepSound();
 
-                        // Cari produk yang sesuai dengan keyword hasil prediksi AI
                         const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         
                         let matchedProduct = null;
@@ -494,7 +491,6 @@
                             if (matchedProduct) break;
                         }
 
-                        // Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama atau acak
                         if (!matchedProduct && products.length > 0) {
                             matchedProduct = products[0];
                         }
@@ -693,18 +689,21 @@
                     createdAt: new Date().toISOString()
                 };
 
-                await db.transactions.add(newTx);
+                // PERBAIKAN: Menggunakan atomic transaction Dexie untuk mencegah race condition
+                await db.transaction('rw', [db.products, db.transactions], async () => {
+                    await db.transactions.add(newTx);
 
-                for (const item of cart) {
-                    const prod = await db.products.get(item.product.id);
-                    if (prod) {
-                        await db.products.update(item.product.id, { 
-                            stock: Math.max(0, prod.stock - item.qty),
-                            totalSold: (prod.totalSold || 0) + item.qty,
-                            lastSoldDate: new Date().toISOString().split('T')[0]
-                        });
+                    for (const item of cart) {
+                        const prod = await db.products.get(item.product.id);
+                        if (prod) {
+                            await db.products.update(item.product.id, { 
+                                stock: Math.max(0, prod.stock - item.qty),
+                                totalSold: (prod.totalSold || 0) + item.qty,
+                                lastSoldDate: new Date().toISOString().split('T')[0]
+                            });
+                        }
                     }
-                }
+                });
 
                 setLastCompletedTx(newTx);
                 setCart([]);
@@ -766,10 +765,15 @@
                 }
             };
 
+            // PERBAIKAN: Pembersihan instance Chart.js untuk mencegah memory leak
             useEffect(() => {
                 if (activeTab === 'dashboard' && salesChartRef.current && topProductsChartRef.current) {
-                    if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
-                    if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
+                    if (chartInstanceRef.current.sales) {
+                        chartInstanceRef.current.sales.destroy();
+                    }
+                    if (chartInstanceRef.current.top) {
+                        chartInstanceRef.current.top.destroy();
+                    }
 
                     const ctxSales = salesChartRef.current.getContext('2d');
                     chartInstanceRef.current.sales = new Chart(ctxSales, {
@@ -803,6 +807,11 @@
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                     });
                 }
+
+                return () => {
+                    if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
+                    if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
+                };
             }, [activeTab, products]);
 
             useEffect(() => {
