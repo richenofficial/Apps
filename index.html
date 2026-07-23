@@ -222,7 +222,7 @@
         // ----------------------------------------------------------------------
         // DATABASE LOKAL INDEXEDDB (Dexie.js)
         // ----------------------------------------------------------------------
-        const db = new Dexie("VeloPOSProDB");
+        const db = new Dexie("RichenPOSProDB");
         db.version(3).stores({
             products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
             categories: '++id, name',
