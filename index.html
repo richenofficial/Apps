@@ -201,7 +201,7 @@
         const kamusSinonimAI = {
             "safety pin": ["peniti", "sabun", "bumbu", "sembako"],
             "packet": ["snack", "mie", "kopi", "renceng", "pak", "indomie", "goreng"],
-            "bottle": ["minuman", "botol", "kecap", "saus", "aqua"],
+            "bottle": ["minuman", "botol", "kecap", "saus", "aqua", "le minerale"],
             "can": ["susu", "minuman", "kaleng"],
             "soap": ["sabun", "shampoo", "deterjen", "lifebuoy"],
             "instant noodle": ["mie", "indomie", "goreng", "spesial"],
@@ -235,7 +235,6 @@
             return `${year}-${month}-${day}`;
         }
 
-        // Data Sampel Awal Jika Firebase Masih Kosong
         async function initFirebaseSampleData() {
             const ref = firebaseDb.ref('pos_data');
             const snapshot = await ref.once('value');
@@ -351,7 +350,6 @@
                     dbRef.on('value', (snapshot) => {
                         const data = snapshot.val();
                         if (data) {
-                            // Produk
                             if (data.products) {
                                 const prodArray = Object.keys(data.products).map(key => ({
                                     id: key,
@@ -362,7 +360,6 @@
                                 setProducts([]);
                             }
 
-                            // Kategori
                             if (data.categories) {
                                 const catArray = Array.isArray(data.categories) 
                                     ? data.categories 
@@ -372,7 +369,6 @@
                                 setCategories([]);
                             }
 
-                            // Transaksi
                             if (data.transactions) {
                                 const txArray = Object.keys(data.transactions).map(key => ({
                                     id: key,
@@ -383,7 +379,6 @@
                                 setTransactions([]);
                             }
 
-                            // Pengaturan Toko
                             if (data.settings) {
                                 setStoreInfo(data.settings);
                             }
@@ -462,7 +457,7 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (DIOPTIMASI AGAR CEPAT & AKURAT)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -493,92 +488,87 @@
                 };
             }, [isVisualScanOpen]);
 
-            // PERBAIKAN: Fungsi Scan Visual AI yang Lebih Cepat (Sat-Set) & Akurat
-const handleCaptureAndDetectAi = async () => {
-    if (!visualVideoRef.current) return;
-    setIsAiLoading(true);
-    setAiDetectedName("⚡ Memindai kilat...");
+            const handleCaptureAndDetectAi = async () => {
+                if (!visualVideoRef.current) return;
+                setIsAiLoading(true);
+                setAiDetectedName("⚡ Memindai kilat...");
 
-    try {
-        if (!aiModelRef.current) {
-            aiModelRef.current = await mobilenet.load({
-                version: 2,
-                alpha: 0.5 // Menggunakan alpha lebih kecil agar proses komputasi jauh lebih ringan & cepat
-            });
-        }
-
-        const video = visualVideoRef.current;
-        const canvas = document.createElement('canvas');
-        
-        // Kompres ukuran canvas agar proses piksel gambar di-load dengan instan
-        canvas.width = 224;
-        canvas.height = 224;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 224, 224);
-
-        const predictions = await aiModelRef.current.classify(canvas);
-        
-        if (predictions && predictions.length > 0) {
-            const topPrediction = predictions[0].className.toLowerCase();
-            setAiDetectedName(`AI: "${topPrediction}"`);
-            
-            playBeepSound();
-
-            // Perbaikan Logika Pencocokan: Cek langsung ke database produk toko
-            let matchedProduct = null;
-
-            // 1. Prioritas pencocokan langsung dari nama produk di database
-            for (let p of products) {
-                const pName = p.name.toLowerCase();
-                // Jika hasil prediksi AI mengandung bagian dari nama produk (misal: "mineral", "aqua", "le minerale")
-                if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
-                    matchedProduct = p;
-                    break;
-                }
-            }
-
-            // 2. Jika tidak ketemu, gunakan kamus sinonim
-            if (!matchedProduct) {
-                let expandedKeywords = [topPrediction];
-                Object.keys(kamusSinonimAI).forEach(key => {
-                    if (topPrediction.includes(key) || key.includes(topPrediction)) {
-                        expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
+                try {
+                    if (!aiModelRef.current) {
+                        aiModelRef.current = await mobilenet.load({
+                            version: 2,
+                            alpha: 0.5 // Kompresi model agar cepat (sat-set)
+                        });
                     }
-                });
 
-                for (let key of expandedKeywords) {
-                    matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
-                    if (matchedProduct) break;
-                }
-            }
+                    const video = visualVideoRef.current;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 224;
+                    canvas.height = 224;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, 224, 224);
 
-            // 3. Fallback cerdas: Jika objek botol/minuman terdeteksi, arahkan ke produk minuman pertama jika belum spesifik
-            if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink'))) {
-                matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
-            }
+                    const predictions = await aiModelRef.current.classify(canvas);
+                    
+                    if (predictions && predictions.length > 0) {
+                        const topPrediction = predictions[0].className.toLowerCase();
+                        setAiDetectedName(`AI: "${topPrediction}"`);
+                        
+                        playBeepSound();
 
-            if (matchedProduct) {
-                setTimeout(() => {
-                    addToCart(matchedProduct);
-                    setIsVisualScanOpen(false);
+                        let matchedProduct = null;
+
+                        // 1. Cocokkan langsung dengan nama produk di database
+                        for (let p of products) {
+                            const pName = p.name.toLowerCase();
+                            if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
+                                matchedProduct = p;
+                                break;
+                            }
+                        }
+
+                        // 2. Jika belum ketemu, gunakan kamus sinonim lokal
+                        if (!matchedProduct) {
+                            let expandedKeywords = [topPrediction];
+                            Object.keys(kamusSinonimAI).forEach(key => {
+                                if (topPrediction.includes(key) || key.includes(topPrediction)) {
+                                    expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
+                                }
+                            });
+
+                            for (let key of expandedKeywords) {
+                                matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
+                                if (matchedProduct) break;
+                            }
+                        }
+
+                        // 3. Fallback cerdas untuk kategori minuman/botol
+                        if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink') || topPrediction.includes('mineral'))) {
+                            matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
+                        }
+
+                        if (matchedProduct) {
+                            setTimeout(() => {
+                                addToCart(matchedProduct);
+                                setIsVisualScanOpen(false);
+                                setIsAiLoading(false);
+                                alert(`✨ Berhasil! Produk "${matchedProduct.name}" dimasukkan ke keranjang.`);
+                            }, 150);
+                        } else {
+                            setIsAiLoading(false);
+                            alert(`Objek "${topPrediction}" terdeteksi, tetapi tidak ada produk yang cocok di database toko.`);
+                        }
+                    } else {
+                        setIsAiLoading(false);
+                        setAiDetectedName("Gagal mendeteksi gambar.");
+                    }
+                } catch (error) {
+                    console.error("AI Scan Error:", error);
                     setIsAiLoading(false);
-                    alert(`✨ Berhasil! Produk "${matchedProduct.name}" dimasukkan ke keranjang.`);
-                }, 200); // Respon kilat
-            } else {
-                setIsAiLoading(false);
-                alert(`Objek "${topPrediction}" terdeteksi, namun tidak ada produk yang cocok. Pastikan nama produk di menu Produk sesuai.`);
-            }
-        } else {
-            setIsAiLoading(false);
-            setAiDetectedName("Gagal mendeteksi gambar.");
-        }
-    } catch (error) {
-        console.error("AI Scan Error:", error);
-        setIsAiLoading(false);
-        setAiDetectedName("Gagal memproses.");
-        alert("Terjadi kendala pada sistem AI: " + error.message);
-    }
-};
+                    setAiDetectedName("Gagal memproses.");
+                    alert("Terjadi kendala pada sistem AI: " + error.message);
+                }
+            };
 
             // Smart Auto-complete Instant Engine
             useEffect(() => {
@@ -752,10 +742,8 @@ const handleCaptureAndDetectAi = async () => {
                     createdAt: new Date().toISOString()
                 };
 
-                // Simpan Transaksi ke Firebase secara Real-Time
                 await firebaseDb.ref('pos_data/transactions').push(newTx);
 
-                // Update Stok Produk di Firebase
                 for (const item of cart) {
                     const prod = products.find(p => p.id === item.product.id);
                     if (prod) {
@@ -910,7 +898,6 @@ const handleCaptureAndDetectAi = async () => {
                             </nav>
                         </div>
 
-                        {/* TOMBOL STATUS SINKRONISASI DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -1048,6 +1035,36 @@ const handleCaptureAndDetectAi = async () => {
                                                     );
                                                 })
                                             )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* PANEL BARANG TERLARIS & PALING LAMA TIDAK TERJUAL YANG DIPULIHKAN */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <span className="font-bold text-white pr-2 truncate">{p.name}</span>
+                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => (a.totalSold || 0) - (b.totalSold || 0)).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <div className="pr-2 truncate">
+                                                        <p className="font-bold text-white truncate">{p.name}</p>
+                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate || '-'}</p>
+                                                    </div>
+                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
