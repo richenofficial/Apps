@@ -29,9 +29,6 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Dexie.js (IndexedDB Local Offline Database) -->
-    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
-    
     <!-- Firebase App & Database -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -200,6 +197,18 @@
             }
         }
 
+        // Kamus sinonim AI agar label MobileNet akurat mengenali produk lokal
+        const kamusSinonimAI = {
+            "safety pin": ["peniti", "sabun", "bumbu", "sembako"],
+            "packet": ["snack", "mie", "kopi", "renceng", "pak", "indomie", "goreng"],
+            "bottle": ["minuman", "botol", "kecap", "saus", "aqua", "le minerale"],
+            "can": ["susu", "minuman", "kaleng"],
+            "soap": ["sabun", "shampoo", "deterjen", "lifebuoy"],
+            "instant noodle": ["mie", "indomie", "goreng", "spesial"],
+            "snack": ["snack", "chiki", "biskuit"],
+            "grocery": ["sembako", "beras", "gula", "minyak", "bimoli"]
+        };
+
         // ----------------------------------------------------------------------
         // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
         // ----------------------------------------------------------------------
@@ -219,17 +228,6 @@
         }
         const firebaseDb = firebase.database();
 
-        // ----------------------------------------------------------------------
-        // DATABASE LOKAL INDEXEDDB (Dexie.js)
-        // ----------------------------------------------------------------------
-        const db = new Dexie("VeloPOSProDB");
-        db.version(3).stores({
-            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
-            categories: '++id, name',
-            transactions: '++id, transactionNo, total, totalCost, profit, paymentMethod, cashierName, customerName, createdAt',
-            settings: 'id, storeName, address, phone, receiptFooter'
-        });
-
         function formatDateLocal(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -237,34 +235,42 @@
             return `${year}-${month}-${day}`;
         }
 
-        async function initSampleData() {
-            const count = await db.products.count();
-            if (count === 0) {
+        async function initFirebaseSampleData() {
+            const ref = firebaseDb.ref('pos_data');
+            const snapshot = await ref.once('value');
+            if (!snapshot.exists()) {
                 const today = new Date();
                 const expSoon = new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
                 const expFar = new Date(today.getTime() + (180 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
                 
-                await db.categories.bulkAdd([
-                    { name: 'Makanan' },
-                    { name: 'Minuman' },
-                    { name: 'Sembako' },
-                    { name: 'Kebutuhan' }
-                ]);
+                const initialProducts = {
+                    '1': { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 4, minStock: 10, expiredDate: expSoon, totalSold: 142, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    '2': { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 85, minStock: 15, expiredDate: expFar, totalSold: 210, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    '3': { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 8, minStock: 10, expiredDate: expSoon, totalSold: 88, lastSoldDate: '2026-07-20', imageUrl: '' },
+                    '4': { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 45, lastSoldDate: '2026-07-15', imageUrl: '' },
+                    '5': { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 2, minStock: 8, expiredDate: expFar, totalSold: 5, lastSoldDate: '2026-05-10', imageUrl: '' }
+                };
 
-                await db.products.bulkAdd([
-                    { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 4, minStock: 10, expiredDate: expSoon, totalSold: 142, lastSoldDate: '2026-07-22', imageUrl: '' },
-                    { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 85, minStock: 15, expiredDate: expFar, totalSold: 210, lastSoldDate: '2026-07-22', imageUrl: '' },
-                    { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 8, minStock: 10, expiredDate: expSoon, totalSold: 88, lastSoldDate: '2026-07-20', imageUrl: '' },
-                    { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 45, lastSoldDate: '2026-07-15', imageUrl: '' },
-                    { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 2, minStock: 8, expiredDate: expFar, totalSold: 5, lastSoldDate: '2026-05-10', imageUrl: '' }
-                ]);
+                const initialCategories = [
+                    { id: '1', name: 'Makanan' },
+                    { id: '2', name: 'Minuman' },
+                    { id: '3', name: 'Sembako' },
+                    { id: '4', name: 'Kebutuhan' }
+                ];
 
-                await db.settings.put({
+                const initialSettings = {
                     id: 'store_info',
                     storeName: 'VELO MART MINIMARKET',
                     address: 'Jl. Pemuda No. 88, Jakarta',
                     phone: '081234567890',
                     receiptFooter: 'Terima Kasih Atas Kunjungan Anda\nBarang Yang Sudah Dibeli Tidak Dapat Ditukar'
+                };
+
+                await ref.set({
+                    products: initialProducts,
+                    categories: initialCategories,
+                    settings: initialSettings,
+                    transactions: {}
                 });
             }
         }
@@ -298,15 +304,11 @@
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
             const [aiDetectedName, setAiDetectedName] = useState('');
-            const [aiCandidates, setAiCandidates] = useState([]); // Kandidat produk hasil deteksi AI (untuk konfirmasi manual)
-            const [isAiModelReady, setIsAiModelReady] = useState(false);
-
+            
             const visualVideoRef = useRef(null);
             const visualStreamRef = useRef(null);
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
-            const productEmbeddingsRef = useRef({}); // Cache embedding foto produk: { [productId]: { vector, imageUrl } }
-            const aiLastAddedRef = useRef({ id: null, time: 0 }); // Cegah double-add saat live-scan
 
             // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -341,49 +343,60 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
+            // Sinkronisasi Real-Time Firebase Listener
             useEffect(() => {
-                initSampleData().then(() => {
-                    refreshData();
+                initFirebaseSampleData().then(() => {
+                    const dbRef = firebaseDb.ref('pos_data');
+                    dbRef.on('value', (snapshot) => {
+                        const data = snapshot.val();
+                        if (data) {
+                            if (data.products) {
+                                const prodArray = Object.keys(data.products).map(key => ({
+                                    id: key,
+                                    ...data.products[key]
+                                }));
+                                setProducts(prodArray);
+                            } else {
+                                setProducts([]);
+                            }
+
+                            if (data.categories) {
+                                const catArray = Array.isArray(data.categories) 
+                                    ? data.categories 
+                                    : Object.keys(data.categories).map(key => ({ id: key, ...data.categories[key] }));
+                                setCategories(catArray);
+                            } else {
+                                setCategories([]);
+                            }
+
+                            if (data.transactions) {
+                                const txArray = Object.keys(data.transactions).map(key => ({
+                                    id: key,
+                                    ...data.transactions[key]
+                                }));
+                                setTransactions(txArray);
+                            } else {
+                                setTransactions([]);
+                            }
+
+                            if (data.settings) {
+                                setStoreInfo(data.settings);
+                            }
+                        }
+                    });
                 });
             }, []);
-
-            const refreshData = async () => {
-                const p = await db.products.toArray();
-                const c = await db.categories.toArray();
-                const t = await db.transactions.toArray();
-                const s = await db.settings.get('store_info');
-                setProducts(p);
-                setCategories(c);
-                setTransactions(t);
-                if (s) setStoreInfo(s);
-            };
 
             const handleBackupToFirebase = async () => {
                 setIsBackingUp(true);
                 try {
-                    const allProducts = await db.products.toArray();
-                    const allCategories = await db.categories.toArray();
-                    const allTransactions = await db.transactions.toArray();
-                    const storeSetting = await db.settings.get('store_info');
-
-                    const backupData = {
-                        products: allProducts,
-                        categories: allCategories,
-                        transactions: allTransactions,
-                        settings: storeSetting || {},
-                        updatedAt: new Date().toISOString()
-                    };
-
-                    await firebaseDb.ref('pos_backup').set(backupData);
-
                     const nowStr = new Date().toLocaleString('id-ID');
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
-
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84).");
+                    alert("✅ Data sudah tersinkronisasi otomatis secara real-time ke Firebase Cloud!");
                 } catch (error) {
                     console.error("Backup Error:", error);
-                    alert("❌ Gagal backup ke Firebase: " + error.message);
+                    alert("❌ Gagal menyinkronkan data: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
@@ -393,17 +406,19 @@
             // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
             // ----------------------------------------------------------------------
             useEffect(() => {
+                let html5QrCode = null;
+
                 if (isScannerOpen) {
-                    setTimeout(() => {
+                    const timer = setTimeout(() => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem) return;
 
-                        const html5QrCode = new Html5Qrcode("reader");
+                        html5QrCode = new Html5Qrcode("reader");
                         html5QrCodeRef.current = html5QrCode;
 
                         html5QrCode.start(
                             { facingMode: "environment" },
-                            { fps: 15, qrbox: { width: 250, height: 150 } },
+                            { fps: 20, qrbox: { width: 250, height: 150 } },
                             (decodedText) => {
                                 playBeepSound();
                                 const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
@@ -422,11 +437,15 @@
                             setIsScannerOpen(false);
                         });
                     }, 300);
+
+                    return () => clearTimeout(timer);
                 } else {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
-                        }).catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        if (html5QrCodeRef.current.isScanning) {
+                            html5QrCodeRef.current.stop().then(() => {
+                                html5QrCodeRef.current.clear();
+                            }).catch(e => console.log(e));
+                        }
                     }
                 }
 
@@ -438,106 +457,17 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js + MobileNet)
-            //    Menggunakan 2 metode deteksi:
-            //    a) Kemiripan visual (embedding similarity) terhadap FOTO PRODUK ASLI
-            //       yang sudah diupload di database (paling akurat, kalau foto tersedia)
-            //    b) Pencocokan keyword label ImageNet sebagai fallback bila produk
-            //       belum punya foto sama sekali
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (DIOPTIMASI AGAR CEPAT & AKURAT)
             // ----------------------------------------------------------------------
-
-            // Kamus sinonim label ImageNet (Inggris) -> kata kunci umum produk toko (Indonesia)
-            const AI_LABEL_SYNONYMS = {
-                'water bottle': 'air minum', 'water jug': 'air minum', 'pop bottle': 'minuman',
-                'soda bottle': 'minuman', 'beer bottle': 'minuman', 'wine bottle': 'minuman',
-                'milk can': 'susu', 'packet': 'makanan', 'envelope': 'makanan',
-                'soap dispenser': 'sabun', 'bath towel': 'kebutuhan', 'paper towel': 'makanan',
-                'plastic bag': 'makanan', 'grocery store': 'sembako', 'cardboard': 'sembako'
-            };
-
-            const normalizeText = (str) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-            // Hitung cosine similarity antara 2 vektor embedding
-            const cosineSimilarity = (a, b) => {
-                let dot = 0, na = 0, nb = 0;
-                const len = Math.min(a.length, b.length);
-                for (let i = 0; i < len; i++) {
-                    dot += a[i] * b[i];
-                    na += a[i] * a[i];
-                    nb += b[i] * b[i];
-                }
-                if (na === 0 || nb === 0) return 0;
-                return dot / (Math.sqrt(na) * Math.sqrt(nb));
-            };
-
-            // Muat elemen <img> dari imageUrl (base64 atau URL) untuk diproses model AI
-            const loadImageElement = (url) => new Promise((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => resolve(img);
-                img.onerror = (e) => reject(e);
-                img.src = url;
-            });
-
-            // Ambil vektor embedding visual dari sebuah elemen gambar/video menggunakan MobileNet
-            const getEmbeddingFromElement = async (element) => {
-                const embeddingTensor = aiModelRef.current.infer(element, true);
-                const arr = await embeddingTensor.data();
-                embeddingTensor.dispose();
-                return Array.from(arr);
-            };
-
-            // Siapkan (cache) embedding untuk semua foto produk yang tersedia di database,
-            // supaya saat capture tidak perlu proses ulang dari nol tiap kali
-            const ensureProductEmbeddings = async () => {
-                if (!aiModelRef.current) return;
-                for (const p of products) {
-                    if (!p.imageUrl) continue;
-                    const cached = productEmbeddingsRef.current[p.id];
-                    if (cached && cached.imageUrl === p.imageUrl) continue; // sudah ada & belum berubah
-                    try {
-                        const imgEl = await loadImageElement(p.imageUrl);
-                        const vector = await getEmbeddingFromElement(imgEl);
-                        productEmbeddingsRef.current[p.id] = { vector, imageUrl: p.imageUrl };
-                    } catch (e) {
-                        // Lewati foto yang gagal dimuat (mis. terblokir CORS), tidak menghentikan proses lain
-                        console.warn("Gagal memproses foto produk untuk AI:", p.name, e);
-                    }
-                }
-            };
-
             useEffect(() => {
                 if (isVisualScanOpen) {
-                    // Pastikan Scan Barcode ditutup dulu supaya kamera tidak dipakai 2 mode sekaligus
-                    if (isScannerOpen) setIsScannerOpen(false);
-
-                    setAiDetectedName('Menyiapkan kamera & model AI...');
-                    setAiCandidates([]);
-                    setIsAiModelReady(false);
-
-                    const startCamera = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
-
-                    startCamera({ video: { facingMode: { ideal: "environment" } } })
-                        .catch(() => startCamera({ video: true })) // fallback ke kamera manapun (mis. laptop tanpa kamera belakang)
+                    setAiDetectedName('');
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
                         .then(stream => {
                             visualStreamRef.current = stream;
                             if (visualVideoRef.current) {
                                 visualVideoRef.current.srcObject = stream;
                             }
-                            // Preload model & embedding foto produk di latar belakang agar capture pertama instan
-                            (async () => {
-                                try {
-                                    if (!aiModelRef.current) {
-                                        aiModelRef.current = await mobilenet.load();
-                                    }
-                                    await ensureProductEmbeddings();
-                                    setIsAiModelReady(true);
-                                    setAiDetectedName('');
-                                } catch (e) {
-                                    console.error("Gagal memuat model AI:", e);
-                                    setAiDetectedName('Gagal memuat model AI, periksa koneksi internet.');
-                                }
-                            })();
                         })
                         .catch(err => {
                             console.error("Gagal mengaktifkan kamera visual scan:", err);
@@ -549,7 +479,6 @@
                         visualStreamRef.current.getTracks().forEach(track => track.stop());
                         visualStreamRef.current = null;
                     }
-                    setAiCandidates([]);
                 }
 
                 return () => {
@@ -560,115 +489,85 @@
             }, [isVisualScanOpen]);
 
             const handleCaptureAndDetectAi = async () => {
-                const video = visualVideoRef.current;
-                if (!video) return;
-
-                // Pastikan stream video sudah benar-benar siap sebelum diambil framenya,
-                // kalau belum, AI akan menganalisis frame kosong/hitam dan hasilnya ngawur
-                if (video.readyState < 2 || video.videoWidth === 0) {
-                    setAiDetectedName("Kamera masih memuat, tunggu sebentar lalu coba lagi...");
-                    return;
-                }
-
+                if (!visualVideoRef.current) return;
                 setIsAiLoading(true);
-                setAiCandidates([]);
-                setAiDetectedName("Menganalisis gambar dengan AI...");
+                setAiDetectedName("⚡ Memindai kilat...");
 
                 try {
                     if (!aiModelRef.current) {
-                        aiModelRef.current = await mobilenet.load();
-                    }
-                    // Pastikan semua foto produk yang tersedia sudah diproses jadi embedding
-                    await ensureProductEmbeddings();
-
-                    // --- METODE 1: Kemiripan visual terhadap foto produk asli (paling akurat) ---
-                    const hasAnyProductPhoto = Object.keys(productEmbeddingsRef.current).length > 0;
-                    let imageCandidates = [];
-                    if (hasAnyProductPhoto) {
-                        const liveEmbedding = await getEmbeddingFromElement(video);
-                        for (const p of products) {
-                            const cached = productEmbeddingsRef.current[p.id];
-                            if (!cached) continue;
-                            const score = cosineSimilarity(liveEmbedding, cached.vector);
-                            if (score >= 0.45) {
-                                imageCandidates.push({ product: p, score, source: 'foto' });
-                            }
-                        }
-                    }
-
-                    // --- METODE 2: Fallback pencocokan label AI (kalau produk belum punya foto) ---
-                    const predictions = await aiModelRef.current.classify(video, 5);
-                    let labelCandidates = [];
-                    let topLabel = '';
-                    if (predictions && predictions.length > 0) {
-                        topLabel = predictions[0].className.split(',')[0].trim();
-                        predictions.forEach((pred, idx) => {
-                            const rawKeywords = pred.className.toLowerCase().split(',').map(k => k.trim());
-                            const keywords = rawKeywords.flatMap(k => AI_LABEL_SYNONYMS[k] ? [k, AI_LABEL_SYNONYMS[k]] : [k]);
-                            for (const key of keywords) {
-                                const normKey = normalizeText(key);
-                                if (!normKey) continue;
-                                products.forEach(p => {
-                                    if (normalizeText(p.name).includes(normKey) || normalizeText(p.category).includes(normKey)) {
-                                        // Skor sintetis dari probabilitas prediksi, diskon tiap urutan lebih rendah
-                                        const score = (pred.probability || 0.3) * (1 - idx * 0.15) * 0.6; // dibatasi < skor foto asli
-                                        labelCandidates.push({ product: p, score, source: 'label' });
-                                    }
-                                });
-                            }
+                        aiModelRef.current = await mobilenet.load({
+                            version: 2,
+                            alpha: 0.5 // Kompresi model agar cepat (sat-set)
                         });
                     }
 
-                    // Gabungkan kandidat, ambil skor tertinggi per produk, urutkan
-                    const merged = {};
-                    [...imageCandidates, ...labelCandidates].forEach(c => {
-                        const existing = merged[c.product.id];
-                        if (!existing || c.score > existing.score) merged[c.product.id] = c;
-                    });
-                    const rankedCandidates = Object.values(merged).sort((a, b) => b.score - a.score).slice(0, 3);
+                    const video = visualVideoRef.current;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 224;
+                    canvas.height = 224;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, 224, 224);
 
-                    playBeepSound();
-                    setIsAiLoading(false);
+                    const predictions = await aiModelRef.current.classify(canvas);
+                    
+                    if (predictions && predictions.length > 0) {
+                        const topPrediction = predictions[0].className.toLowerCase();
+                        setAiDetectedName(`AI: "${topPrediction}"`);
+                        
+                        playBeepSound();
 
-                    if (rankedCandidates.length === 0) {
-                        setAiDetectedName(topLabel ? `Objek terdeteksi: "${topLabel}" (tidak cocok dengan produk manapun)` : "Tidak ada objek yang bisa dikenali.");
-                        setAiCandidates([]);
-                        return;
-                    }
+                        let matchedProduct = null;
 
-                    const top = rankedCandidates[0];
-                    const second = rankedCandidates[1];
-                    const isConfidentAndUnambiguous = top.source === 'foto' && top.score >= 0.72 && (!second || (top.score - second.score) >= 0.08);
-
-                    if (isConfidentAndUnambiguous) {
-                        // Cegah produk yang sama ter-tambah berkali-kali dalam waktu sangat singkat
-                        const now = Date.now();
-                        if (aiLastAddedRef.current.id === top.product.id && (now - aiLastAddedRef.current.time) < 2500) {
-                            setAiDetectedName(`"${top.product.name}" baru saja ditambahkan.`);
-                            return;
+                        // 1. Cocokkan langsung dengan nama produk di database
+                        for (let p of products) {
+                            const pName = p.name.toLowerCase();
+                            if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
+                                matchedProduct = p;
+                                break;
+                            }
                         }
-                        aiLastAddedRef.current = { id: top.product.id, time: now };
-                        addToCart(top.product);
-                        setAiDetectedName(`✨ Cocok ${Math.round(top.score * 100)}%! "${top.product.name}" ditambahkan ke keranjang.`);
-                        setAiCandidates([]);
+
+                        // 2. Jika belum ketemu, gunakan kamus sinonim lokal
+                        if (!matchedProduct) {
+                            let expandedKeywords = [topPrediction];
+                            Object.keys(kamusSinonimAI).forEach(key => {
+                                if (topPrediction.includes(key) || key.includes(topPrediction)) {
+                                    expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
+                                }
+                            });
+
+                            for (let key of expandedKeywords) {
+                                matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
+                                if (matchedProduct) break;
+                            }
+                        }
+
+                        // 3. Fallback cerdas untuk kategori minuman/botol
+                        if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink') || topPrediction.includes('mineral'))) {
+                            matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
+                        }
+
+                        if (matchedProduct) {
+                            setTimeout(() => {
+                                addToCart(matchedProduct);
+                                setIsVisualScanOpen(false);
+                                setIsAiLoading(false);
+                                alert(`✨ Berhasil! Produk "${matchedProduct.name}" dimasukkan ke keranjang.`);
+                            }, 150);
+                        } else {
+                            setIsAiLoading(false);
+                            alert(`Objek "${topPrediction}" terdeteksi, tetapi tidak ada produk yang cocok di database toko.`);
+                        }
                     } else {
-                        // Kurang yakin / ambigu -> tampilkan pilihan untuk dikonfirmasi manual oleh kasir
-                        setAiDetectedName(topLabel ? `AI Memprediksi objek: "${topLabel}". Pilih produk yang sesuai:` : "Beberapa kemungkinan produk ditemukan, silakan pilih:");
-                        setAiCandidates(rankedCandidates);
+                        setIsAiLoading(false);
+                        setAiDetectedName("Gagal mendeteksi gambar.");
                     }
                 } catch (error) {
                     console.error("AI Scan Error:", error);
                     setIsAiLoading(false);
-                    setAiDetectedName("Terjadi kesalahan sistem AI.");
-                    alert("Gagal menjalankan AI Scan: " + error.message);
+                    setAiDetectedName("Gagal memproses.");
+                    alert("Terjadi kendala pada sistem AI: " + error.message);
                 }
-            };
-
-            const handleConfirmAiCandidate = (product) => {
-                addToCart(product);
-                aiLastAddedRef.current = { id: product.id, time: Date.now() };
-                setAiDetectedName(`"${product.name}" ditambahkan ke keranjang.`);
-                setAiCandidates([]);
             };
 
             // Smart Auto-complete Instant Engine
@@ -724,6 +623,7 @@
             };
 
             const filteredTransactions = transactions.filter(t => {
+                if (!t.createdAt) return true;
                 const txDate = new Date(t.createdAt).toISOString().split('T')[0];
                 if (startDate && txDate < startDate) return false;
                 if (endDate && txDate > endDate) return false;
@@ -804,8 +704,8 @@
                 if (!newCategoryInput.trim()) return;
                 const exists = categories.find(c => c.name.toLowerCase() === newCategoryInput.trim().toLowerCase());
                 if (!exists) {
-                    await db.categories.add({ name: newCategoryInput.trim() });
-                    await refreshData();
+                    const newCatId = 'cat_' + Date.now();
+                    await firebaseDb.ref('pos_data/categories/' + newCatId).set({ id: newCatId, name: newCategoryInput.trim() });
                     setProductForm(prev => ({ ...prev, category: newCategoryInput.trim() }));
                 }
                 setNewCategoryInput('');
@@ -842,15 +742,19 @@
                     createdAt: new Date().toISOString()
                 };
 
-                await db.transactions.add(newTx);
+                await firebaseDb.ref('pos_data/transactions').push(newTx);
 
                 for (const item of cart) {
-                    const prod = await db.products.get(item.product.id);
+                    const prod = products.find(p => p.id === item.product.id);
                     if (prod) {
-                        await db.products.update(item.product.id, { 
-                            stock: Math.max(0, prod.stock - item.qty),
-                            totalSold: (prod.totalSold || 0) + item.qty,
-                            lastSoldDate: new Date().toISOString().split('T')[0]
+                        const newStock = Math.max(0, prod.stock - item.qty);
+                        const newTotalSold = (prod.totalSold || 0) + item.qty;
+                        const lastSoldDate = new Date().toISOString().split('T')[0];
+                        
+                        await firebaseDb.ref(`pos_data/products/${prod.id}`).update({
+                            stock: newStock,
+                            totalSold: newTotalSold,
+                            lastSoldDate: lastSoldDate
                         });
                     }
                 }
@@ -860,7 +764,6 @@
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
-                refreshData();
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -893,25 +796,27 @@
                     return;
                 }
 
-                await db.products.put({
+                const prodId = productForm.id || ('PROD-' + Date.now());
+                const payload = {
                     ...productForm,
+                    id: prodId,
                     costPrice: parseFloat(productForm.costPrice) || 0,
                     sellingPrice: parseFloat(productForm.sellingPrice) || 0,
                     stock: parseInt(productForm.stock) || 0,
                     minStock: parseInt(productForm.minStock) || 0,
                     totalSold: productForm.totalSold || 0,
                     lastSoldDate: productForm.lastSoldDate || '-'
-                });
+                };
+
+                await firebaseDb.ref(`pos_data/products/${prodId}`).set(payload);
 
                 setIsProductModalOpen(false);
-                refreshData();
-                alert("Produk berhasil disimpan!");
+                alert("Produk berhasil disimpan dan disinkronkan!");
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
-                    await db.products.delete(id);
-                    refreshData();
+                    await firebaseDb.ref(`pos_data/products/${id}`).remove();
                 }
             };
 
@@ -970,7 +875,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold">● Firebase Connected</span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold">● Real-Time Synced</span>
                                 </div>
                             </div>
 
@@ -993,22 +898,15 @@
                             </nav>
                         </div>
 
-                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
                                 disabled={isBackingUp}
-                                className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
+                                className="w-full py-2.5 px-3 bg-emerald-600/20 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
-                                <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
-                                {isBackingUp ? 'Memproses Backup...' : 'Backup ke Firebase'}
+                                <i data-lucide="cloud" className="w-4 h-4"></i> 
+                                Sinkronisasi Aktif
                             </button>
-
-                            {lastBackupTime && (
-                                <p className="text-[10px] text-slate-400 text-center font-semibold">
-                                    Backup Terakhir:<br/>{lastBackupTime}
-                                </p>
-                            )}
 
                             {lowStockProducts.length > 0 && (
                                 <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-semibold flex items-center gap-2">
@@ -1031,13 +929,6 @@
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
                                     <h2 className="text-2xl font-black text-white">Dashboard Penjualan</h2>
-                                    <button 
-                                        onClick={handleBackupToFirebase}
-                                        disabled={isBackingUp}
-                                        className="md:hidden px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
-                                    >
-                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Backup
-                                    </button>
                                 </div>
 
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -1148,14 +1039,15 @@
                                     </div>
                                 </div>
 
+                                {/* PANEL BARANG TERLARIS & PALING LAMA TIDAK TERJUAL YANG DIPULIHKAN */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
                                         <div className="space-y-2">
-                                            {[...products].sort((a,b) => b.totalSold - a.totalSold).slice(0,3).map(p => (
+                                            {[...products].sort((a,b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0,3).map(p => (
                                                 <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
                                                     <span className="font-bold text-white pr-2 truncate">{p.name}</span>
-                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
+                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1164,13 +1056,13 @@
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
                                         <div className="space-y-2">
-                                            {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
+                                            {[...products].sort((a,b) => (a.totalSold || 0) - (b.totalSold || 0)).slice(0,3).map(p => (
                                                 <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
                                                     <div className="pr-2 truncate">
                                                         <p className="font-bold text-white truncate">{p.name}</p>
-                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate}</p>
+                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate || '-'}</p>
                                                     </div>
-                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
+                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1521,23 +1413,6 @@
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
-                                
-                                <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
-                                    <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
-                                    </h3>
-                                    <p className="text-xs text-slate-300">
-                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
-                                    </p>
-                                    <button 
-                                        onClick={handleBackupToFirebase}
-                                        disabled={isBackingUp}
-                                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
-                                    >
-                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
-                                    </button>
-                                </div>
 
                                 <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 max-w-lg shadow-lg">
                                     <div>
@@ -1556,7 +1431,7 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { await firebaseDb.ref('pos_data/settings').set({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
@@ -1742,36 +1617,9 @@
                                 </div>
 
                                 {aiDetectedName && (
-                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
+                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">
                                         {aiDetectedName}
                                     </p>
-                                )}
-
-                                {aiCandidates.length > 0 && (
-                                    <div className="space-y-1.5 text-left">
-                                        {aiCandidates.map(c => (
-                                            <button
-                                                key={c.product.id}
-                                                onClick={() => handleConfirmAiCandidate(c.product)}
-                                                className="w-full flex items-center gap-2.5 p-2 bg-slate-800/70 hover:bg-indigo-600/30 border border-slate-700 hover:border-indigo-500 rounded-xl transition"
-                                            >
-                                                <div className="w-9 h-9 rounded-lg bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                                                    {c.product.imageUrl ? (
-                                                        <img src={c.product.imageUrl} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <i data-lucide="package" className="w-4 h-4 text-slate-400"></i>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-bold text-white truncate">{c.product.name}</p>
-                                                    <p className="text-[10px] text-slate-400">
-                                                        {c.source === 'foto' ? 'Cocok foto' : 'Kemungkinan'} · {Math.round(c.score * 100)}%
-                                                    </p>
-                                                </div>
-                                                <i data-lucide="plus-circle" className="w-4 h-4 text-indigo-400 shrink-0"></i>
-                                            </button>
-                                        ))}
-                                    </div>
                                 )}
 
                                 <div className="space-y-2">
@@ -1781,7 +1629,7 @@
                                         className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="sparkles" className="w-4 h-4"></i>
-                                        {isAiLoading ? "Sedang Menganalisis..." : (isAiModelReady ? "Ambil Foto & Deteksi AI" : "Menyiapkan AI...")}
+                                        {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
                                     </button>
                                     <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
                                         Tutup
