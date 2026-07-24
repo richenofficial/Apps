@@ -493,67 +493,92 @@
                 };
             }, [isVisualScanOpen]);
 
-            const handleCaptureAndDetectAi = async () => {
-                if (!visualVideoRef.current) return;
-                setIsAiLoading(true);
-                setAiDetectedName("Menganalisis gambar dengan AI...");
+            // PERBAIKAN: Fungsi Scan Visual AI yang Lebih Cepat (Sat-Set) & Akurat
+const handleCaptureAndDetectAi = async () => {
+    if (!visualVideoRef.current) return;
+    setIsAiLoading(true);
+    setAiDetectedName("⚡ Memindai kilat...");
 
-                try {
-                    if (!aiModelRef.current) {
-                        aiModelRef.current = await mobilenet.load();
-                    }
+    try {
+        if (!aiModelRef.current) {
+            aiModelRef.current = await mobilenet.load({
+                version: 2,
+                alpha: 0.5 // Menggunakan alpha lebih kecil agar proses komputasi jauh lebih ringan & cepat
+            });
+        }
 
-                    const video = visualVideoRef.current;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth || 640;
-                    canvas.height = video.videoHeight || 480;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const video = visualVideoRef.current;
+        const canvas = document.createElement('canvas');
+        
+        // Kompres ukuran canvas agar proses piksel gambar di-load dengan instan
+        canvas.width = 224;
+        canvas.height = 224;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 224, 224);
 
-                    const predictions = await aiModelRef.current.classify(canvas);
-                    
-                    if (predictions && predictions.length > 0) {
-                        const topPrediction = predictions[0].className.toLowerCase();
-                        const confidence = (predictions[0].probability * 100).toFixed(1);
-                        setAiDetectedName(`AI Memprediksi: "${topPrediction}" (${confidence}%)`);
-                        
-                        playBeepSound();
+        const predictions = await aiModelRef.current.classify(canvas);
+        
+        if (predictions && predictions.length > 0) {
+            const topPrediction = predictions[0].className.toLowerCase();
+            setAiDetectedName(`AI: "${topPrediction}"`);
+            
+            playBeepSound();
 
-                        let expandedKeywords = [topPrediction];
-                        Object.keys(kamusSinonimAI).forEach(key => {
-                            if (topPrediction.includes(key) || key.includes(topPrediction)) {
-                                expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
-                            }
-                        });
+            // Perbaikan Logika Pencocokan: Cek langsung ke database produk toko
+            let matchedProduct = null;
 
-                        let matchedProduct = null;
-                        for (let key of expandedKeywords) {
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
-                            if (matchedProduct) break;
-                        }
-
-                        if (matchedProduct) {
-                            setTimeout(() => {
-                                addToCart(matchedProduct);
-                                setIsVisualScanOpen(false);
-                                setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
-                            }, 500);
-                        } else {
-                            setIsAiLoading(false);
-                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama produk di toko Anda.`);
-                        }
-                    } else {
-                        setIsAiLoading(false);
-                        setAiDetectedName("Gagal mendeteksi gambar.");
-                    }
-                } catch (error) {
-                    console.error("AI Scan Error:", error);
-                    setIsAiLoading(false);
-                    setAiDetectedName("Terjadi kesalahan sistem AI.");
-                    alert("Gagal menjalankan AI Scan: " + error.message);
+            // 1. Prioritas pencocokan langsung dari nama produk di database
+            for (let p of products) {
+                const pName = p.name.toLowerCase();
+                // Jika hasil prediksi AI mengandung bagian dari nama produk (misal: "mineral", "aqua", "le minerale")
+                if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
+                    matchedProduct = p;
+                    break;
                 }
-            };
+            }
+
+            // 2. Jika tidak ketemu, gunakan kamus sinonim
+            if (!matchedProduct) {
+                let expandedKeywords = [topPrediction];
+                Object.keys(kamusSinonimAI).forEach(key => {
+                    if (topPrediction.includes(key) || key.includes(topPrediction)) {
+                        expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
+                    }
+                });
+
+                for (let key of expandedKeywords) {
+                    matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
+                    if (matchedProduct) break;
+                }
+            }
+
+            // 3. Fallback cerdas: Jika objek botol/minuman terdeteksi, arahkan ke produk minuman pertama jika belum spesifik
+            if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink'))) {
+                matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
+            }
+
+            if (matchedProduct) {
+                setTimeout(() => {
+                    addToCart(matchedProduct);
+                    setIsVisualScanOpen(false);
+                    setIsAiLoading(false);
+                    alert(`✨ Berhasil! Produk "${matchedProduct.name}" dimasukkan ke keranjang.`);
+                }, 200); // Respon kilat
+            } else {
+                setIsAiLoading(false);
+                alert(`Objek "${topPrediction}" terdeteksi, namun tidak ada produk yang cocok. Pastikan nama produk di menu Produk sesuai.`);
+            }
+        } else {
+            setIsAiLoading(false);
+            setAiDetectedName("Gagal mendeteksi gambar.");
+        }
+    } catch (error) {
+        console.error("AI Scan Error:", error);
+        setIsAiLoading(false);
+        setAiDetectedName("Gagal memproses.");
+        alert("Terjadi kendala pada sistem AI: " + error.message);
+    }
+};
 
             // Smart Auto-complete Instant Engine
             useEffect(() => {
