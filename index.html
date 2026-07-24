@@ -298,19 +298,11 @@
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
             const [aiDetectedName, setAiDetectedName] = useState('');
-            const [isCameraReady, setIsCameraReady] = useState(false);
             
             const visualVideoRef = useRef(null);
             const visualStreamRef = useRef(null);
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
-            const productsRef = useRef([]);
-            const isBarcodeProcessingRef = useRef(false);
-
-            // Selalu sinkron dengan data produk terbaru tanpa memicu restart kamera scanner
-            useEffect(() => {
-                productsRef.current = products;
-            }, [products]);
 
             // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -397,22 +389,13 @@
             // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
             // ----------------------------------------------------------------------
             useEffect(() => {
-                let cancelled = false;
-
                 if (isScannerOpen) {
-                    isBarcodeProcessingRef.current = false;
-
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        alert("Kamera tidak tersedia di perangkat/browser ini, atau halaman tidak dibuka melalui HTTPS!");
-                        setIsScannerOpen(false);
-                        return;
-                    }
-
-                    const startScanner = (cameraConfig, isFallbackAttempt) => {
+                    setTimeout(() => {
                         const readerElem = document.getElementById("reader");
-                        if (!readerElem || cancelled) return;
+                        if (!readerElem) return;
 
                         const html5QrCode = new Html5Qrcode("reader", {
+                            // Batasi ke format barcode/QR yang umum dipakai retail agar deteksi lebih cepat & akurat
                             formatsToSupport: [
                                 Html5QrcodeSupportedFormats.QR_CODE,
                                 Html5QrcodeSupportedFormats.EAN_13,
@@ -421,76 +404,68 @@
                                 Html5QrcodeSupportedFormats.UPC_E,
                                 Html5QrcodeSupportedFormats.CODE_128,
                                 Html5QrcodeSupportedFormats.CODE_39,
-                                Html5QrcodeSupportedFormats.CODE_93,
-                                Html5QrcodeSupportedFormats.CODABAR,
                                 Html5QrcodeSupportedFormats.ITF
                             ],
+                            // Manfaatkan BarcodeDetector native browser (jika tersedia) untuk akurasi & performa lebih baik
+                            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
                             verbose: false
                         });
                         html5QrCodeRef.current = html5QrCode;
 
+                        const onScanSuccess = (decodedText) => {
+                            playBeepSound();
+                            const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
+                            if (found) {
+                                addToCart(found);
+                                setIsScannerOpen(false);
+                            } else {
+                                alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
+                                setIsScannerOpen(false);
+                            }
+                        };
+
+                        const scanConfig = {
+                            fps: 15,
+                            // qrbox responsif: menyesuaikan lebar layar kamera agar tidak error di layar sempit
+                            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                                const width = Math.floor(Math.min(viewfinderWidth * 0.85, 280));
+                                const height = Math.floor(Math.min(viewfinderHeight * 0.6, 160));
+                                return { width: Math.max(width, 150), height: Math.max(height, 100) };
+                            },
+                            aspectRatio: 1.7777778
+                        };
+
+                        // Coba kamera belakang dulu, jika gagal (mis. laptop tanpa kamera 'environment'), fallback ke kamera manapun yang tersedia
                         html5QrCode.start(
-                            cameraConfig,
-                            {
-                                fps: 15,
-                                qrbox: { width: 260, height: 160 },
-                                aspectRatio: 1.6,
-                                disableFlip: false
-                            },
-                            (decodedText) => {
-                                // Kunci proses agar 1 kode hanya diproses sekali walau kamera mendeteksi berkali-kali dalam 1 frame burst
-                                if (isBarcodeProcessingRef.current) return;
-                                isBarcodeProcessingRef.current = true;
-
-                                playBeepSound();
-                                const cleanText = (decodedText || '').trim();
-                                const found = productsRef.current.find(p =>
-                                    (p.barcode && p.barcode.trim() === cleanText) ||
-                                    (p.sku && p.sku.trim().toLowerCase() === cleanText.toLowerCase())
-                                );
-
-                                if (found) {
-                                    addToCart(found);
-                                    setIsScannerOpen(false);
-                                } else {
-                                    setIsScannerOpen(false);
-                                    setTimeout(() => {
-                                        alert(`Barcode "${cleanText}" terdeteksi, namun produk tidak ditemukan di database!`);
-                                    }, 150);
-                                }
-                            },
+                            { facingMode: "environment" },
+                            scanConfig,
+                            onScanSuccess,
                             () => {}
                         ).catch(err => {
-                            console.error("Gagal membuka kamera barcode:", err);
-
-                            // Fallback: jika constraint facingMode gagal (umum di sebagian browser Android/desktop),
-                            // coba cari kamera belakang secara manual lewat daftar device. Hanya dicoba sekali.
-                            if (isFallbackAttempt) {
-                                alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
-                                setIsScannerOpen(false);
-                                return;
-                            }
-
+                            console.warn("Kamera belakang tidak tersedia, mencoba kamera lain:", err);
                             Html5Qrcode.getCameras().then(devices => {
-                                if (cancelled) return;
-                                if (devices && devices.length) {
-                                    const backCam = devices.find(d => /back|rear|belakang|environment/i.test(d.label)) || devices[devices.length - 1];
-                                    if (backCam) {
-                                        startScanner(backCam.id, true);
-                                        return;
-                                    }
+                                if (devices && devices.length > 0) {
+                                    const fallbackCameraId = devices[devices.length - 1].id;
+                                    html5QrCode.start(
+                                        fallbackCameraId,
+                                        scanConfig,
+                                        onScanSuccess,
+                                        () => {}
+                                    ).catch(err2 => {
+                                        console.error("Gagal membuka kamera barcode:", err2);
+                                        alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
+                                        setIsScannerOpen(false);
+                                    });
+                                } else {
+                                    alert("Tidak ada kamera yang terdeteksi pada perangkat ini!");
+                                    setIsScannerOpen(false);
                                 }
-                                alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
-                                setIsScannerOpen(false);
-                            }).catch(() => {
+                            }).catch(err2 => {
+                                console.error("Gagal mengambil daftar kamera:", err2);
                                 alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
                                 setIsScannerOpen(false);
                             });
                         });
-                    };
-
-                    setTimeout(() => {
-                        if (!cancelled) startScanner({ facingMode: "environment" }, false);
                     }, 300);
                 } else {
                     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
@@ -501,81 +476,78 @@
                 }
 
                 return () => {
-                    cancelled = true;
                     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
-                        }).catch(e => console.log(e));
+                        html5QrCodeRef.current.stop().catch(e => console.log(e));
                     }
                 };
-            }, [isScannerOpen]);
+            }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
             // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
             // ----------------------------------------------------------------------
             useEffect(() => {
-                let cancelled = false;
-
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
-                    setIsCameraReady(false);
-
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        alert("Kamera tidak tersedia di perangkat/browser ini, atau halaman tidak dibuka melalui HTTPS!");
-                        setIsVisualScanOpen(false);
-                        return;
-                    }
-
-                    // Mulai preload model AI di background agar saat tombol "Ambil Foto" ditekan, model sudah siap
-                    if (!aiModelRef.current) {
-                        mobilenet.load().then(model => {
-                            if (!cancelled) aiModelRef.current = model;
-                        }).catch(e => console.error("Gagal preload model AI:", e));
-                    }
-
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } } })
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } })
                         .then(stream => {
-                            if (cancelled) {
-                                stream.getTracks().forEach(track => track.stop());
-                                return;
-                            }
                             visualStreamRef.current = stream;
                             if (visualVideoRef.current) {
                                 visualVideoRef.current.srcObject = stream;
-                                const markReady = () => setIsCameraReady(true);
-                                visualVideoRef.current.onloadedmetadata = () => {
-                                    visualVideoRef.current.play().catch(() => {});
-                                    markReady();
-                                };
                             }
                         })
                         .catch(err => {
-                            console.error("Gagal mengaktifkan kamera visual scan:", err);
-                            alert("Izin kamera ditolak atau perangkat kamera tidak ditemukan!");
-                            setIsVisualScanOpen(false);
+                            console.warn("Kamera belakang tidak tersedia, mencoba kamera default:", err);
+                            // Fallback ke kamera manapun yang tersedia (mis. laptop hanya punya webcam depan)
+                            navigator.mediaDevices.getUserMedia({ video: true })
+                                .then(stream => {
+                                    visualStreamRef.current = stream;
+                                    if (visualVideoRef.current) {
+                                        visualVideoRef.current.srcObject = stream;
+                                    }
+                                })
+                                .catch(err2 => {
+                                    console.error("Gagal mengaktifkan kamera visual scan:", err2);
+                                    alert("Izin kamera ditolak atau perangkat kamera tidak ditemukan!");
+                                    setIsVisualScanOpen(false);
+                                });
                         });
                 } else {
                     if (visualStreamRef.current) {
                         visualStreamRef.current.getTracks().forEach(track => track.stop());
                         visualStreamRef.current = null;
                     }
-                    setIsCameraReady(false);
                 }
 
                 return () => {
-                    cancelled = true;
                     if (visualStreamRef.current) {
                         visualStreamRef.current.getTracks().forEach(track => track.stop());
                     }
                 };
             }, [isVisualScanOpen]);
 
-            const handleCaptureAndDetectAi = async () => {
-                if (!visualVideoRef.current || isAiLoading) return;
+            // Kamus sinonim umum agar label ImageNet (Inggris) lebih mudah dicocokkan dengan kategori/nama produk toko
+            const AI_LABEL_SYNONYMS = {
+                'water bottle': 'air minum',
+                'water jug': 'air minum',
+                'pop bottle': 'minuman',
+                'soda bottle': 'minuman',
+                'beer bottle': 'minuman',
+                'milk can': 'susu',
+                'packet': 'makanan',
+                'envelope': 'makanan',
+                'soap dispenser': 'sabun',
+                'bath towel': 'kebutuhan'
+            };
 
+            const normalizeText = (str) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+            const handleCaptureAndDetectAi = async () => {
                 const video = visualVideoRef.current;
-                if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
-                    alert("Kamera belum siap sepenuhnya, tunggu sebentar lalu coba lagi!");
+                if (!video) return;
+
+                // Pastikan stream video sudah benar-benar siap sebelum diambil framenya, kalau belum, AI akan menganalisis frame kosong/hitam
+                if (video.readyState < 2 || video.videoWidth === 0) {
+                    setAiDetectedName("Kamera masih memuat, tunggu sebentar lalu coba lagi...");
                     return;
                 }
 
@@ -583,38 +555,37 @@
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
-                    // Load TensorFlow MobileNet model (biasanya sudah di-preload saat modal dibuka)
+                    // Load TensorFlow MobileNet model
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    // Ambil snapshot frame video ke canvas agar hasil klasifikasi konsisten (bukan frame yang masih bergerak/blur)
-                    const captureCanvas = document.createElement('canvas');
-                    captureCanvas.width = video.videoWidth;
-                    captureCanvas.height = video.videoHeight;
-                    captureCanvas.getContext('2d').drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+                    // Deteksi foto objek dari tag video kamera live (ambil beberapa kandidat prediksi teratas)
+                    const predictions = await aiModelRef.current.classify(video, 5);
 
-                    // Deteksi foto objek dari hasil snapshot kamera
-                    const predictions = await aiModelRef.current.classify(captureCanvas);
-                    
                     if (predictions && predictions.length > 0) {
                         const topPrediction = predictions[0].className;
                         setAiDetectedName(`AI Memprediksi: "${topPrediction}"`);
-                        
+
                         playBeepSound();
 
-                        // Cari produk yang sesuai dengan keyword hasil prediksi AI
-                        const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
-                        
+                        // Cari produk yang sesuai dengan keyword dari beberapa prediksi teratas (bukan hanya prediksi #1)
                         let matchedProduct = null;
-                        for (let key of keywords) {
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
-                            if (matchedProduct) break;
-                        }
+                        for (const pred of predictions) {
+                            const rawKeywords = pred.className.toLowerCase().split(',').map(k => k.trim());
+                            // Tambahkan padanan kata Indonesia dari kamus sinonim bila ada
+                            const keywords = rawKeywords.flatMap(k => AI_LABEL_SYNONYMS[k] ? [k, AI_LABEL_SYNONYMS[k]] : [k]);
 
-                        // Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama atau acak
-                        if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
+                            for (const key of keywords) {
+                                const normKey = normalizeText(key);
+                                if (!normKey) continue;
+                                matchedProduct = products.find(p =>
+                                    normalizeText(p.name).includes(normKey) ||
+                                    normalizeText(p.category).includes(normKey)
+                                );
+                                if (matchedProduct) break;
+                            }
+                            if (matchedProduct) break;
                         }
 
                         if (matchedProduct) {
@@ -625,8 +596,10 @@
                                 alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
                             }, 600);
                         } else {
+                            // Tidak ditemukan produk yang cocok - JANGAN menambahkan produk acak/pertama ke keranjang
                             setIsAiLoading(false);
-                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama produk di toko Anda.`);
+                            setAiDetectedName(`Objek terdeteksi: "${topPrediction}" (tidak cocok dengan produk manapun)`);
+                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama/kategori produk di toko Anda. Silakan gunakan Scan Barcode atau cari manual.`);
                         }
                     } else {
                         setIsAiLoading(false);
@@ -1702,13 +1675,6 @@
                                         className="w-full h-full object-cover"
                                     ></video>
 
-                                    {!isCameraReady && !isAiLoading && (
-                                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
-                                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                                            <p className="text-xs font-bold text-indigo-300 animate-pulse">Menyalakan kamera...</p>
-                                        </div>
-                                    )}
-
                                     {isAiLoading && (
                                         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
                                             <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
@@ -1726,11 +1692,11 @@
                                 <div className="space-y-2">
                                     <button 
                                         onClick={handleCaptureAndDetectAi}
-                                        disabled={isAiLoading || !isCameraReady}
-                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
+                                        disabled={isAiLoading}
+                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="sparkles" className="w-4 h-4"></i>
-                                        {isAiLoading ? "Sedang Menganalisis..." : (!isCameraReady ? "Menunggu Kamera..." : "Ambil Foto & Deteksi AI")}
+                                        {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
                                     </button>
                                     <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
                                         Tutup
