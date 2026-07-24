@@ -197,9 +197,12 @@
             }
         }
 
-        // Kamus sinonim AI agar label MobileNet akurat mengenali produk lokal
+        // Kamus sinonim AI lanjutan agar objek seperti botol air mineral, mie, dll tidak tertukar
         const kamusSinonimAI = {
-            "safety pin": ["peniti", "sabun", "bumbu", "sembako"],
+            "water bottle": ["mineral", "aqua", "le minerale", "air", "bottled water"],
+            "water jug": ["mineral", "aqua", "le minerale", "air"],
+            "bubble": ["mineral", "aqua", "le minerale", "air"],
+            "cup": ["minuman", "teh", "susu"],
             "packet": ["snack", "mie", "kopi", "renceng", "pak", "indomie", "goreng"],
             "bottle": ["minuman", "botol", "kecap", "saus", "aqua", "le minerale"],
             "can": ["susu", "minuman", "kaleng"],
@@ -457,7 +460,7 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (DIOPTIMASI AGAR CEPAT & AKURAT)
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (DIPERBAIKI AGAR CEPAT & AKURAT)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -494,10 +497,11 @@
                 setAiDetectedName("⚡ Memindai kilat...");
 
                 try {
+                    // Muat model MobileNet dengan kompresi alpha 0.5 agar proses loading dan deteksi sangat cepat (sat-set)
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load({
                             version: 2,
-                            alpha: 0.5 // Kompresi model agar cepat (sat-set)
+                            alpha: 0.5
                         });
                     }
 
@@ -518,16 +522,17 @@
 
                         let matchedProduct = null;
 
-                        // 1. Cocokkan langsung dengan nama produk di database
+                        // 1. Pencarian akurat langsung mencocokkan teks prediksi dengan nama produk di database toko
                         for (let p of products) {
                             const pName = p.name.toLowerCase();
-                            if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
+                            const cleanPreds = topPrediction.split(',').map(s => s.trim());
+                            if (cleanPreds.some(word => word.length > 2 && pName.includes(word))) {
                                 matchedProduct = p;
                                 break;
                             }
                         }
 
-                        // 2. Jika belum ketemu, gunakan kamus sinonim lokal
+                        // 2. Jika belum ketemu, periksa menggunakan kamus sinonim lokal (menghindari salah deteksi sabun/produk lain)
                         if (!matchedProduct) {
                             let expandedKeywords = [topPrediction];
                             Object.keys(kamusSinonimAI).forEach(key => {
@@ -542,9 +547,9 @@
                             }
                         }
 
-                        // 3. Fallback cerdas untuk kategori minuman/botol
+                        // 3. Fallback cerdas untuk kategori minuman / air mineral botol
                         if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink') || topPrediction.includes('mineral'))) {
-                            matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
+                            matchedProduct = products.find(p => p.category === 'Minuman' && (p.name.toLowerCase().includes('mineral') || p.name.toLowerCase().includes('aqua'))) || products.find(p => p.category === 'Minuman');
                         }
 
                         if (matchedProduct) {
@@ -1039,7 +1044,7 @@
                                     </div>
                                 </div>
 
-                                {/* PANEL BARANG TERLARIS & PALING LAMA TIDAK TERJUAL YANG DIPULIHKAN */}
+                                {/* PANEL BARANG TERLARIS & PALING LAMA TIDAK TERJUAL */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
@@ -1413,6 +1418,23 @@
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
+                                
+                                <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
+                                    <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
+                                    </h3>
+                                    <p className="text-xs text-slate-300">
+                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
+                                    </p>
+                                    <button 
+                                        onClick={handleBackupToFirebase}
+                                        disabled={isBackingUp}
+                                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
+                                    >
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i>
+                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
+                                    </button>
+                                </div>
 
                                 <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 max-w-lg shadow-lg">
                                     <div>
@@ -1431,7 +1453,7 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await firebaseDb.ref('pos_data/settings').set({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
