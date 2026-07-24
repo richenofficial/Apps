@@ -365,7 +365,6 @@
                 }
             };
 
-            // PERBAIKAN STABILITAS SCANNER BARCODE (CEGAH LAYAR HITAM)
             useEffect(() => {
                 let isMounted = true;
                 if (isScannerOpen) {
@@ -435,7 +434,6 @@
                 };
             }, [isScannerOpen, products]);
 
-            // PERBAIKAN AKURASI VISUAL AI SCAN (MENCARI ITEM BERBEDA)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -486,20 +484,18 @@
 
                         let matchedProduct = null;
                         
-                        // Perulangan menyeluruh pada list produk toko untuk mencocokkan label AI secara spesifik
                         for (let pred of predictions) {
                             const rawLabels = pred.className.toLowerCase();
                             const words = rawLabels.split(',').map(w => w.trim());
                             
                             for (let word of words) {
-                                if (word.length < 3) continue; // Abaikan kata terlalu pendek agar akurat
+                                if (word.length < 3) continue;
                                 matchedProduct = products.find(p => p.name.toLowerCase().includes(word));
                                 if (matchedProduct) break;
                             }
                             if (matchedProduct) break;
                         }
 
-                        // Fallback pencarian fleksibel jika label tidak persis
                         if (!matchedProduct && predictions[0].className) {
                             const firstToken = predictions[0].className.split(',')[0].toLowerCase().trim();
                             matchedProduct = products.find(p => p.name.toLowerCase().includes(firstToken));
@@ -838,7 +834,6 @@
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72"><canvas ref={topProductsChartRef}></canvas></div>
                                 </div>
 
-                                <!-- PANEL PENTING: BARANG PERLU DIBELANJAKAN, EXPIRED, TERLARIS, KURANG LAKU -->
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
                                         <div className="flex justify-between items-center mb-3">
@@ -1198,7 +1193,6 @@
                         </div>
                     </main>
 
-                    {/* MODAL PRODUK */}
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1247,7 +1241,6 @@
                         </div>
                     )}
 
-                    {/* MODAL VISUAL AI */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
@@ -1274,7 +1267,6 @@
                         </div>
                     )}
 
-                    {/* MODAL PEMBAYARAN */}
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
@@ -1323,7 +1315,6 @@
                         </div>
                     )}
 
-                    {/* MODAL STRUK */}
                     {isReceiptModalOpen && lastCompletedTx && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
