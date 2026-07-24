@@ -182,7 +182,6 @@
             );
         }
 
-        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -266,12 +265,19 @@
                     phone: '081234567890',
                     receiptFooter: 'Terima Kasih Atas Kunjungan Anda\nBarang Yang Sudah Dibeli Tidak Dapat Ditukar'
                 });
+
+                // Initial sync to cloud
+                const initialBackup = {
+                    products: await db.products.toArray(),
+                    categories: await db.categories.toArray(),
+                    transactions: await db.transactions.toArray(),
+                    settings: await db.settings.get('store_info'),
+                    updatedAt: new Date().toISOString()
+                };
+                await firebaseDb.ref('pos_backup').set(initialBackup);
             }
         }
 
-        // ----------------------------------------------------------------------
-        // MAIN APP COMPONENT
-        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -279,21 +285,17 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
-            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
-            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
-            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
-            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
@@ -304,7 +306,6 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
-            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -313,7 +314,6 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-            // State Modal Input / Edit Produk
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -332,16 +332,9 @@
                 imageUrl: ''
             });
 
-            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
-
-            useEffect(() => {
-                initSampleData().then(() => {
-                    refreshData();
-                });
-            }, []);
 
             const refreshData = async () => {
                 const p = await db.products.toArray();
@@ -353,6 +346,47 @@
                 setTransactions(t);
                 if (s) setStoreInfo(s);
             };
+
+            // PERBAIKAN SINKRONISASI REAL-TIME MULTI-DEVICE DENGAN FIREBASE
+            useEffect(() => {
+                initSampleData().then(() => {
+                    refreshData();
+                });
+
+                // Mendengarkan perubahan data secara real-time dari Firebase cloud
+                const backupRef = firebaseDb.ref('pos_backup');
+                const handleCloudSync = async (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        try {
+                            if (data.products) {
+                                await db.products.clear();
+                                await db.products.bulkPut(data.products);
+                            }
+                            if (data.categories) {
+                                await db.categories.clear();
+                                await db.categories.bulkPut(data.categories);
+                            }
+                            if (data.transactions) {
+                                await db.transactions.clear();
+                                await db.transactions.bulkPut(data.transactions);
+                            }
+                            if (data.settings) {
+                                await db.settings.put(data.settings);
+                            }
+                            await refreshData();
+                        } catch (err) {
+                            console.error("Auto sync error:", err);
+                        }
+                    }
+                };
+
+                backupRef.on('value', handleCloudSync);
+
+                return () => {
+                    backupRef.off('value', handleCloudSync);
+                };
+            }, []);
 
             const handleBackupToFirebase = async () => {
                 setIsBackingUp(true);
@@ -376,7 +410,7 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84).");
+                    alert("✅ Berhasil! Data telah disinkronkan ke Firebase Cloud.");
                 } catch (error) {
                     console.error("Backup Error:", error);
                     alert("❌ Gagal backup ke Firebase: " + error.message);
@@ -386,47 +420,56 @@
             };
 
             // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
+            // 1. PERBAIKAN LOGIKA SCANNER BARCODE KAMERA REAL-TIME
             // ----------------------------------------------------------------------
             useEffect(() => {
+                let isMounted = true;
                 if (isScannerOpen) {
                     setTimeout(() => {
                         const readerElem = document.getElementById("reader");
-                        if (!readerElem) return;
+                        if (!readerElem || !isMounted) return;
 
-                        const html5QrCode = new Html5Qrcode("reader");
-                        html5QrCodeRef.current = html5QrCode;
+                        if (!html5QrCodeRef.current) {
+                            html5QrCodeRef.current = new Html5Qrcode("reader");
+                        }
 
-                        html5QrCode.start(
-                            { facingMode: "environment" },
-                            { fps: 15, qrbox: { width: 250, height: 150 } },
-                            (decodedText) => {
-                                playBeepSound();
-                                const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
-                                if (found) {
-                                    addToCart(found);
-                                    setIsScannerOpen(false);
-                                } else {
-                                    alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
-                                    setIsScannerOpen(false);
-                                }
-                            },
-                            () => {}
-                        ).catch(err => {
-                            console.error("Gagal membuka kamera barcode:", err);
-                            alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
-                            setIsScannerOpen(false);
-                        });
+                        const html5QrCode = html5QrCodeRef.current;
+
+                        if (!html5QrCode.isScanning) {
+                            html5QrCode.start(
+                                { facingMode: "environment" },
+                                { fps: 20, qrbox: { width: 280, height: 160 } },
+                                (decodedText) => {
+                                    playBeepSound();
+                                    const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
+                                    if (found) {
+                                        addToCart(found);
+                                        setIsScannerOpen(false);
+                                    } else {
+                                        alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan!`);
+                                        setIsScannerOpen(false);
+                                    }
+                                },
+                                () => {}
+                            ).catch(err => {
+                                console.error("Gagal membuka kamera barcode:", err);
+                                alert("Kamera tidak dapat diakses atau izin ditolak oleh browser!");
+                                setIsScannerOpen(false);
+                            });
+                        }
                     }, 300);
                 } else {
                     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
                         html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
+                            try {
+                                html5QrCodeRef.current.clear();
+                            } catch(e) {}
                         }).catch(e => console.log(e));
                     }
                 }
 
                 return () => {
+                    isMounted = false;
                     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
                         html5QrCodeRef.current.stop().catch(e => console.log(e));
                     }
@@ -434,7 +477,7 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
+            // 2. PERBAIKAN LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -466,7 +509,10 @@
             }, [isVisualScanOpen]);
 
             const handleCaptureAndDetectAi = async () => {
-                if (!visualVideoRef.current) return;
+                if (!visualVideoRef.current || visualVideoRef.current.readyState !== 4) {
+                    alert("Kamera belum siap, mohon tunggu sebentar...");
+                    return;
+                }
                 setIsAiLoading(true);
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
@@ -518,7 +564,6 @@
                 }
             };
 
-            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -689,20 +734,31 @@
                     createdAt: new Date().toISOString()
                 };
 
-                // PERBAIKAN: Menggunakan atomic transaction Dexie untuk mencegah race condition
-                await db.transaction('rw', [db.products, db.transactions], async () => {
-                    await db.transactions.add(newTx);
+                await db.transactions.add(newTx);
 
-                    for (const item of cart) {
-                        const prod = await db.products.get(item.product.id);
-                        if (prod) {
-                            await db.products.update(item.product.id, { 
-                                stock: Math.max(0, prod.stock - item.qty),
-                                totalSold: (prod.totalSold || 0) + item.qty,
-                                lastSoldDate: new Date().toISOString().split('T')[0]
-                            });
-                        }
+                for (const item of cart) {
+                    const prod = await db.products.get(item.product.id);
+                    if (prod) {
+                        await db.products.update(item.product.id, { 
+                            stock: Math.max(0, prod.stock - item.qty),
+                            totalSold: (prod.totalSold || 0) + item.qty,
+                            lastSoldDate: new Date().toISOString().split('T')[0]
+                        });
                     }
+                }
+
+                // Sync update to Firebase Cloud
+                const allProducts = await db.products.toArray();
+                const allCategories = await db.categories.toArray();
+                const allTransactions = await db.transactions.toArray();
+                const storeSetting = await db.settings.get('store_info');
+
+                await firebaseDb.ref('pos_backup').set({
+                    products: allProducts,
+                    categories: allCategories,
+                    transactions: allTransactions,
+                    settings: storeSetting || {},
+                    updatedAt: new Date().toISOString()
                 });
 
                 setLastCompletedTx(newTx);
@@ -753,27 +809,48 @@
                     lastSoldDate: productForm.lastSoldDate || '-'
                 });
 
+                // Sync to Firebase
+                const allProducts = await db.products.toArray();
+                const allCategories = await db.categories.toArray();
+                const allTransactions = await db.transactions.toArray();
+                const storeSetting = await db.settings.get('store_info');
+                await firebaseDb.ref('pos_backup').set({
+                    products: allProducts,
+                    categories: allCategories,
+                    transactions: allTransactions,
+                    settings: storeSetting || {},
+                    updatedAt: new Date().toISOString()
+                });
+
                 setIsProductModalOpen(false);
                 refreshData();
-                alert("Produk berhasil disimpan!");
+                alert("Produk berhasil disimpan dan disinkronkan!");
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
                     await db.products.delete(id);
+                    
+                    const allProducts = await db.products.toArray();
+                    const allCategories = await db.categories.toArray();
+                    const allTransactions = await db.transactions.toArray();
+                    const storeSetting = await db.settings.get('store_info');
+                    await firebaseDb.ref('pos_backup').set({
+                        products: allProducts,
+                        categories: allCategories,
+                        transactions: allTransactions,
+                        settings: storeSetting || {},
+                        updatedAt: new Date().toISOString()
+                    });
+
                     refreshData();
                 }
             };
 
-            // PERBAIKAN: Pembersihan instance Chart.js untuk mencegah memory leak
             useEffect(() => {
                 if (activeTab === 'dashboard' && salesChartRef.current && topProductsChartRef.current) {
-                    if (chartInstanceRef.current.sales) {
-                        chartInstanceRef.current.sales.destroy();
-                    }
-                    if (chartInstanceRef.current.top) {
-                        chartInstanceRef.current.top.destroy();
-                    }
+                    if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
+                    if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
 
                     const ctxSales = salesChartRef.current.getContext('2d');
                     chartInstanceRef.current.sales = new Chart(ctxSales, {
@@ -807,11 +884,6 @@
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                     });
                 }
-
-                return () => {
-                    if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
-                    if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
-                };
             }, [activeTab, products]);
 
             useEffect(() => {
@@ -821,7 +893,6 @@
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
                     
-                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -853,7 +924,6 @@
                             </nav>
                         </div>
 
-                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -861,12 +931,12 @@
                                 className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
                                 <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
-                                {isBackingUp ? 'Memproses Backup...' : 'Backup ke Firebase'}
+                                {isBackingUp ? 'Memproses Sync...' : 'Sync ke Firebase'}
                             </button>
 
                             {lastBackupTime && (
                                 <p className="text-[10px] text-slate-400 text-center font-semibold">
-                                    Backup Terakhir:<br/>{lastBackupTime}
+                                    Sync Terakhir:<br/>{lastBackupTime}
                                 </p>
                             )}
 
@@ -883,10 +953,8 @@
                         </div>
                     </aside>
 
-                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
                         
-                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -896,7 +964,7 @@
                                         disabled={isBackingUp}
                                         className="md:hidden px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
                                     >
-                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Backup
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Sync
                                     </button>
                                 </div>
 
@@ -940,12 +1008,11 @@
                                     </div>
                                 </div>
 
-                                {/* PANEL NOTIFIKASI BARANG STOK MENIPIS & MENDEKATI EXPIRED */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
                                         <div className="flex justify-between items-center mb-3">
                                             <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
-                                                <span>⚠️</span> Barang Stok Menipis (Perlu Dibelanjakan)
+                                                <span>⚠️</span> Barang Stok Menipis
                                             </h3>
                                             <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-500/30">
                                                 {lowStockProducts.length} Barang
@@ -1007,39 +1074,9 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                                        <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
-                                        <div className="space-y-2">
-                                            {[...products].sort((a,b) => b.totalSold - a.totalSold).slice(0,3).map(p => (
-                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
-                                                    <span className="font-bold text-white pr-2 truncate">{p.name}</span>
-                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                                        <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
-                                        <div className="space-y-2">
-                                            {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
-                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
-                                                    <div className="pr-2 truncate">
-                                                        <p className="font-bold text-white truncate">{p.name}</p>
-                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate}</p>
-                                                    </div>
-                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         )}
 
-                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
                                 
@@ -1049,7 +1086,7 @@
                                         <div className="relative flex-1">
                                             <input 
                                                 type="text"
-                                                placeholder="Ketik 1 huruf/angka, nama, barcode, atau SKU..."
+                                                placeholder="Ketik nama, barcode, atau SKU produk..."
                                                 value={searchQuery}
                                                 onChange={e => setSearchQuery(e.target.value)}
                                                 className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner"
@@ -1072,7 +1109,6 @@
                                         </button>
                                     </div>
 
-                                    {/* PANEL MODAL KAMERA SCANNER BARCODE */}
                                     {isScannerOpen && (
                                         <div className="mb-4 bg-slate-900 p-3 rounded-2xl border border-indigo-500/50 shadow-2xl relative">
                                             <div className="flex justify-between items-center mb-2">
@@ -1185,7 +1221,6 @@
                             </div>
                         )}
 
-                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1254,7 +1289,6 @@
                             </div>
                         )}
 
-                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1377,17 +1411,16 @@
                             </div>
                         )}
 
-                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
                                 
                                 <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
                                     <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Synchronization (fpos-8da84)
                                     </h3>
                                     <p className="text-xs text-slate-300">
-                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
+                                        Sinkronkan data ke Firebase Realtime Database agar terhubung di semua perangkat secara langsung.
                                     </p>
                                     <button 
                                         onClick={handleBackupToFirebase}
@@ -1395,7 +1428,7 @@
                                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
+                                        {isBackingUp ? 'Proses Sync...' : 'Sinkronkan Data Sekarang'}
                                     </button>
                                 </div>
 
@@ -1416,14 +1449,26 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { 
+                                        await db.settings.put({...storeInfo, id: 'store_info'}); 
+                                        const allProducts = await db.products.toArray();
+                                        const allCategories = await db.categories.toArray();
+                                        const allTransactions = await db.transactions.toArray();
+                                        await firebaseDb.ref('pos_backup').set({
+                                            products: allProducts,
+                                            categories: allCategories,
+                                            transactions: allTransactions,
+                                            settings: storeInfo,
+                                            updatedAt: new Date().toISOString()
+                                        });
+                                        alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); 
+                                    }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
                             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
                                 <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
@@ -1444,7 +1489,6 @@
 
                     </main>
 
-                    {/* MODAL INPUT / EDIT PRODUK */}
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1576,7 +1620,6 @@
                         </div>
                     )}
 
-                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI) */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
@@ -1624,7 +1667,6 @@
                         </div>
                     )}
 
-                    {/* MODAL PEMBAYARAN */}
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
@@ -1704,7 +1746,6 @@
                         </div>
                     )}
 
-                    {/* MODAL CETAK STRUK */}
                     {isReceiptModalOpen && lastCompletedTx && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
