@@ -45,7 +45,7 @@
     <!-- Html5-QRCode Scanner CDN -->
     <script src="https://unpkg.com/html5-qrcode"></script>
 
-    <!-- TensorFlow.js & MobileNet (Untuk AI Visual Scan Produk Cepat) -->
+    <!-- TensorFlow.js & MobileNet (Untuk AI Visual Scan Produk) -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
 
@@ -365,61 +365,70 @@
                 }
             };
 
-            // OPTIMASI BARCODE SCANNER REAL-TIME & INSTANT
+            // PERBAIKAN STABILITAS SCANNER BARCODE (CEGAH LAYAR HITAM)
             useEffect(() => {
                 let isMounted = true;
                 if (isScannerOpen) {
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem || !isMounted) return;
 
-                        if (!html5QrCodeRef.current) {
-                            html5QrCodeRef.current = new Html5Qrcode("reader");
+                        try {
+                            if (!html5QrCodeRef.current) {
+                                html5QrCodeRef.current = new Html5Qrcode("reader");
+                            }
+                            const scanner = html5QrCodeRef.current;
+                            if (scanner && !scanner.isScanning) {
+                                await scanner.start(
+                                    { facingMode: "environment" },
+                                    { fps: 20, qrbox: { width: 250, height: 150 } },
+                                    (decodedText) => {
+                                        playBeepSound();
+                                        const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
+                                        if (found) {
+                                            addToCart(found);
+                                            setIsScannerOpen(false);
+                                        } else {
+                                            alert(`Barcode "${decodedText}" tidak ditemukan di database!`);
+                                            setIsScannerOpen(false);
+                                        }
+                                    },
+                                    () => {}
+                                );
+                            }
+                        } catch (err) {
+                            console.error("Barcode camera start error:", err);
+                            if (isMounted) {
+                                alert("Gagal membuka kamera barcode. Pastikan izin kamera diaktifkan.");
+                                setIsScannerOpen(false);
+                            }
                         }
-
-                        const scanner = html5QrCodeRef.current;
-                        if (!scanner.isScanning) {
-                            scanner.start(
-                                { facingMode: "environment" },
-                                { fps: 30, qrbox: { width: 260, height: 140 } },
-                                (decodedText) => {
-                                    playBeepSound();
-                                    const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
-                                    if (found) {
-                                        addToCart(found);
-                                        setIsScannerOpen(false);
-                                    } else {
-                                        alert(`Barcode "${decodedText}" tidak ditemukan di database produk!`);
-                                        setIsScannerOpen(false);
-                                    }
-                                },
-                                () => {}
-                            ).catch(err => {
-                                console.error("Scanner error:", err);
-                                if (isMounted) {
-                                    alert("Kamera barcode gagal diakses.");
-                                    setIsScannerOpen(false);
-                                }
-                            });
-                        }
-                    }, 200);
+                    }, 300);
                 } else {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            try { html5QrCodeRef.current.clear(); } catch(e) {}
-                        }).catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        const scanner = html5QrCodeRef.current;
+                        if (scanner.isScanning) {
+                            scanner.stop().then(() => {
+                                scanner.clear().catch(e => {});
+                            }).catch(e => {});
+                        }
                     }
                 }
 
                 return () => {
                     isMounted = false;
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        const scanner = html5QrCodeRef.current;
+                        if (scanner.isScanning) {
+                            scanner.stop().then(() => {
+                                scanner.clear().catch(e => {});
+                            }).catch(e => {});
+                        }
                     }
                 };
             }, [isScannerOpen, products]);
 
-            // OPTIMASI AI VISUAL SCAN (MOBILENET LIGHTWEIGHT & FAST)
+            // PERBAIKAN VISUAL SCAN AI (AKURASI PENCARIAN ITEM)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -455,30 +464,37 @@
                     return;
                 }
                 setIsAiLoading(true);
-                setAiDetectedName("Menganalisis objek secara kilat...");
+                setAiDetectedName("Menganalisis objek...");
 
                 try {
-                    // Memuat model MobileNet teringan untuk performa tercepat
                     if (!aiModelRef.current) {
-                        aiModelRef.current = await mobilenet.load({ version: 1, alpha: 0.25 });
+                        aiModelRef.current = await mobilenet.load({ version: 1, alpha: 0.5 });
                     }
 
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
-                        const topPrediction = predictions[0].className;
-                        setAiDetectedName(`AI Terdeteksi: "${topPrediction}"`);
+                        // Ambil daftar prediksi teratas dari model AI
+                        setAiDetectedName(`AI: ${predictions[0].className}`);
                         playBeepSound();
 
-                        const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         let matchedProduct = null;
-                        for (let key of keywords) {
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
+                        
+                        // Cek kecocokan berdasarkan setiap kata prediksi AI (diurutkan dari yang memiliki probabilitas tertinggi)
+                        for (let pred of predictions) {
+                            const labels = pred.className.toLowerCase().split(',').map(l => l.trim());
+                            for (let label of labels) {
+                                // Cari kata kunci spesifik di nama produk
+                                matchedProduct = products.find(p => p.name.toLowerCase().includes(label));
+                                if (matchedProduct) break;
+                            }
                             if (matchedProduct) break;
                         }
 
-                        if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
+                        // Jika tidak ada kata yang persis sama, lakukan pencarian parsial berdasarkan kata pertama dari prediksi AI
+                        if (!matchedProduct && predictions[0].className) {
+                            const firstWord = predictions[0].className.split(',')[0].toLowerCase().trim();
+                            matchedProduct = products.find(p => p.name.toLowerCase().includes(firstWord));
                         }
 
                         if (matchedProduct) {
@@ -486,10 +502,10 @@
                                 addToCart(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                            }, 300);
+                            }, 400);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek "${topPrediction}" tidak cocok dengan produk di toko.`);
+                            alert(`Objek terdeteksi "${predictions[0].className}", namun tidak ditemukan produk yang cocok di toko.`);
                         }
                     } else {
                         setIsAiLoading(false);
@@ -498,7 +514,7 @@
                 } catch (error) {
                     console.error("AI Scan Error:", error);
                     setIsAiLoading(false);
-                    setAiDetectedName("Terjadi kendala sistem AI.");
+                    setAiDetectedName("Kendala sistem AI.");
                 }
             };
 
@@ -1245,7 +1261,7 @@
                                     <button onClick={() => window.print()} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-lg">
                                         <i data-lucide="printer" className="w-4 h-4"></i> Cetak
                                     </button>
-                                    <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 px-4 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Selesai</button>
+                                    <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Selesai</button>
                                 </div>
                             </div>
                         </div>
