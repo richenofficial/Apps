@@ -374,28 +374,35 @@
                         if (!readerElem || !isMounted) return;
 
                         try {
-                            if (!html5QrCodeRef.current) {
-                                html5QrCodeRef.current = new Html5Qrcode("reader");
+                            if (html5QrCodeRef.current) {
+                                try {
+                                    if (html5QrCodeRef.current.isScanning) {
+                                        await html5QrCodeRef.current.stop();
+                                    }
+                                    await html5QrCodeRef.current.clear();
+                                } catch (e) {}
+                                html5QrCodeRef.current = null;
                             }
+
+                            html5QrCodeRef.current = new Html5Qrcode("reader");
                             const scanner = html5QrCodeRef.current;
-                            if (scanner && !scanner.isScanning) {
-                                await scanner.start(
-                                    { facingMode: "environment" },
-                                    { fps: 20, qrbox: { width: 250, height: 150 } },
-                                    (decodedText) => {
-                                        playBeepSound();
-                                        const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
-                                        if (found) {
-                                            addToCart(found);
-                                            setIsScannerOpen(false);
-                                        } else {
-                                            alert(`Barcode "${decodedText}" tidak ditemukan di database!`);
-                                            setIsScannerOpen(false);
-                                        }
-                                    },
-                                    () => {}
-                                );
-                            }
+                            
+                            await scanner.start(
+                                { facingMode: "environment" },
+                                { fps: 20, qrbox: { width: 250, height: 150 } },
+                                (decodedText) => {
+                                    playBeepSound();
+                                    const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
+                                    if (found) {
+                                        addToCart(found);
+                                        setIsScannerOpen(false);
+                                    } else {
+                                        alert(`Barcode "${decodedText}" tidak ditemukan di database!`);
+                                        setIsScannerOpen(false);
+                                    }
+                                },
+                                () => {}
+                            );
                         } catch (err) {
                             console.error("Barcode camera start error:", err);
                             if (isMounted) {
@@ -403,7 +410,7 @@
                                 setIsScannerOpen(false);
                             }
                         }
-                    }, 300);
+                    }, 350);
                 } else {
                     if (html5QrCodeRef.current) {
                         const scanner = html5QrCodeRef.current;
@@ -428,7 +435,7 @@
                 };
             }, [isScannerOpen, products]);
 
-            // PERBAIKAN VISUAL SCAN AI (AKURASI PENCARIAN ITEM)
+            // PERBAIKAN AKURASI VISUAL AI SCAN (MENCARI ITEM BERBEDA)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -474,27 +481,28 @@
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
-                        // Ambil daftar prediksi teratas dari model AI
                         setAiDetectedName(`AI: ${predictions[0].className}`);
                         playBeepSound();
 
                         let matchedProduct = null;
                         
-                        // Cek kecocokan berdasarkan setiap kata prediksi AI (diurutkan dari yang memiliki probabilitas tertinggi)
+                        // Perulangan menyeluruh pada list produk toko untuk mencocokkan label AI secara spesifik
                         for (let pred of predictions) {
-                            const labels = pred.className.toLowerCase().split(',').map(l => l.trim());
-                            for (let label of labels) {
-                                // Cari kata kunci spesifik di nama produk
-                                matchedProduct = products.find(p => p.name.toLowerCase().includes(label));
+                            const rawLabels = pred.className.toLowerCase();
+                            const words = rawLabels.split(',').map(w => w.trim());
+                            
+                            for (let word of words) {
+                                if (word.length < 3) continue; // Abaikan kata terlalu pendek agar akurat
+                                matchedProduct = products.find(p => p.name.toLowerCase().includes(word));
                                 if (matchedProduct) break;
                             }
                             if (matchedProduct) break;
                         }
 
-                        // Jika tidak ada kata yang persis sama, lakukan pencarian parsial berdasarkan kata pertama dari prediksi AI
+                        // Fallback pencarian fleksibel jika label tidak persis
                         if (!matchedProduct && predictions[0].className) {
-                            const firstWord = predictions[0].className.split(',')[0].toLowerCase().trim();
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(firstWord));
+                            const firstToken = predictions[0].className.split(',')[0].toLowerCase().trim();
+                            matchedProduct = products.find(p => p.name.toLowerCase().includes(firstToken));
                         }
 
                         if (matchedProduct) {
@@ -824,9 +832,101 @@
                                         <p className="text-lg md:text-xl font-black text-sky-300 mt-1">{transactions.length} TRX</p>
                                     </div>
                                 </div>
+
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72"><canvas ref={salesChartRef}></canvas></div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72"><canvas ref={topProductsChartRef}></canvas></div>
+                                </div>
+
+                                <!-- PANEL PENTING: BARANG PERLU DIBELANJAKAN, EXPIRED, TERLARIS, KURANG LAKU -->
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                                                <span>⚠️</span> Barang Perlu Dibelanjakan (Stok Menipis)
+                                            </h3>
+                                            <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                                                {lowStockProducts.length} Item
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                            {lowStockProducts.length === 0 ? (
+                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Semua stok barang aman 👍</p>
+                                            ) : (
+                                                lowStockProducts.map(p => (
+                                                    <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                                                        <div>
+                                                            <p className="font-bold text-white">{p.name}</p>
+                                                            <p className="text-[10px] text-slate-400">Min. Stok: {p.minStock} | SKU: {p.sku}</p>
+                                                        </div>
+                                                        <span className="text-xs font-black text-amber-300 bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/30">
+                                                            Sisa {p.stock} Pcs
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 border border-rose-500/30 p-4 rounded-2xl shadow-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-sm font-bold text-rose-300 flex items-center gap-2">
+                                                <span>⌛</span> Data Produk Mendekati Expired (30 Hari)
+                                            </h3>
+                                            <span className="text-xs bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-bold">
+                                                {expiredSoonProducts.length} Item
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                            {expiredSoonProducts.length === 0 ? (
+                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Tidak ada produk mendekati expired 👍</p>
+                                            ) : (
+                                                expiredSoonProducts.map(p => {
+                                                    const diffDays = Math.ceil((new Date(p.expiredDate) - new Date()) / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                                                            <div>
+                                                                <p className="font-bold text-white">{p.name}</p>
+                                                                <p className="text-[10px] text-slate-400">Exp: <span className="text-rose-300 font-bold">{p.expiredDate}</span></p>
+                                                            </div>
+                                                            <span className="text-xs font-black text-rose-300 bg-rose-500/20 px-2 py-1 rounded-md border border-rose-500/30">
+                                                                {diffDays <= 0 ? 'Expired' : `${diffDays} Hari`}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Paling Terlaris (Fast Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => b.totalSold - a.totalSold).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <span className="font-bold text-white pr-2 truncate">{p.name}</span>
+                                                    <span className="text-emerald-300 font-extrabold shrink-0">{p.totalSold} Terjual</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                                        <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Penjualan Kurang (Slow Moving)</h3>
+                                        <div className="space-y-2">
+                                            {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
+                                                    <div className="pr-2 truncate">
+                                                        <p className="font-bold text-white truncate">{p.name}</p>
+                                                        <p className="text-[10px] text-slate-400">Terakhir Terjual: {p.lastSoldDate || '-'}</p>
+                                                    </div>
+                                                    <span className="text-rose-300 font-extrabold shrink-0">{p.totalSold} Terjual</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
