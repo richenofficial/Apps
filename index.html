@@ -29,6 +29,9 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Dexie.js (IndexedDB Local Offline Database) -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    
     <!-- Firebase App & Database -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -50,7 +53,6 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <style>
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -60,7 +62,6 @@
             font-weight: 700 !important;
         }
 
-        /* PERBAIKAN STRUK PRINTER THERMAL */
         @media print {
             @page {
                 margin: 0;
@@ -111,28 +112,20 @@
         function processImageUrl(url) {
             if (!url || typeof url !== 'string') return '';
             let cleanUrl = url.trim();
-
             if (!cleanUrl) return '';
-
-            if (cleanUrl.startsWith('data:image/')) {
-                return cleanUrl;
-            }
-
+            if (cleanUrl.startsWith('data:image/')) return cleanUrl;
             if (cleanUrl.includes('drive.google.com') && cleanUrl.includes('/file/d/')) {
                 const idMatch = cleanUrl.match(/\/file\/d\/([^\/]+)/);
                 if (idMatch && idMatch[1]) {
                     cleanUrl = `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
                 }
             }
-
             if (cleanUrl.includes('dropbox.com')) {
                 cleanUrl = cleanUrl.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
             }
-
             if (cleanUrl.startsWith('http://')) {
                 cleanUrl = cleanUrl.replace('http://', 'https://');
             }
-
             return cleanUrl;
         }
 
@@ -179,7 +172,6 @@
             );
         }
 
-        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -197,21 +189,6 @@
             }
         }
 
-        // Kamus sinonim AI agar label MobileNet akurat mengenali produk lokal
-        const kamusSinonimAI = {
-            "safety pin": ["peniti", "sabun", "bumbu", "sembako"],
-            "packet": ["snack", "mie", "kopi", "renceng", "pak", "indomie", "goreng"],
-            "bottle": ["minuman", "botol", "kecap", "saus", "aqua", "le minerale"],
-            "can": ["susu", "minuman", "kaleng"],
-            "soap": ["sabun", "shampoo", "deterjen", "lifebuoy"],
-            "instant noodle": ["mie", "indomie", "goreng", "spesial"],
-            "snack": ["snack", "chiki", "biskuit"],
-            "grocery": ["sembako", "beras", "gula", "minyak", "bimoli"]
-        };
-
-        // ----------------------------------------------------------------------
-        // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
-        // ----------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyCk2xwtT9BGIEm520yJqfkSTDED1mOmt4M",
             authDomain: "fpos-8da84.firebaseapp.com",
@@ -228,6 +205,14 @@
         }
         const firebaseDb = firebase.database();
 
+        const db = new Dexie("VeloPOSProDB");
+        db.version(3).stores({
+            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
+            categories: '++id, name',
+            transactions: '++id, transactionNo, total, totalCost, profit, paymentMethod, cashierName, customerName, createdAt',
+            settings: 'id, storeName, address, phone, receiptFooter'
+        });
+
         function formatDateLocal(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -235,49 +220,38 @@
             return `${year}-${month}-${day}`;
         }
 
-        async function initFirebaseSampleData() {
-            const ref = firebaseDb.ref('pos_data');
-            const snapshot = await ref.once('value');
-            if (!snapshot.exists()) {
+        async function initSampleData() {
+            const count = await db.products.count();
+            if (count === 0) {
                 const today = new Date();
                 const expSoon = new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
                 const expFar = new Date(today.getTime() + (180 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
                 
-                const initialProducts = {
-                    '1': { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 4, minStock: 10, expiredDate: expSoon, totalSold: 142, lastSoldDate: '2026-07-22', imageUrl: '' },
-                    '2': { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 85, minStock: 15, expiredDate: expFar, totalSold: 210, lastSoldDate: '2026-07-22', imageUrl: '' },
-                    '3': { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 8, minStock: 10, expiredDate: expSoon, totalSold: 88, lastSoldDate: '2026-07-20', imageUrl: '' },
-                    '4': { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 45, lastSoldDate: '2026-07-15', imageUrl: '' },
-                    '5': { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 2, minStock: 8, expiredDate: expFar, totalSold: 5, lastSoldDate: '2026-05-10', imageUrl: '' }
-                };
+                await db.categories.bulkAdd([
+                    { name: 'Makanan' },
+                    { name: 'Minuman' },
+                    { name: 'Sembako' },
+                    { name: 'Kebutuhan' }
+                ]);
 
-                const initialCategories = [
-                    { id: '1', name: 'Makanan' },
-                    { id: '2', name: 'Minuman' },
-                    { id: '3', name: 'Sembako' },
-                    { id: '4', name: 'Kebutuhan' }
-                ];
+                await db.products.bulkAdd([
+                    { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 4, minStock: 10, expiredDate: expSoon, totalSold: 142, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 85, minStock: 15, expiredDate: expFar, totalSold: 210, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 8, minStock: 10, expiredDate: expSoon, totalSold: 88, lastSoldDate: '2026-07-20', imageUrl: '' },
+                    { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 45, lastSoldDate: '2026-07-15', imageUrl: '' },
+                    { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 2, minStock: 8, expiredDate: expFar, totalSold: 5, lastSoldDate: '2026-05-10', imageUrl: '' }
+                ]);
 
-                const initialSettings = {
+                await db.settings.put({
                     id: 'store_info',
                     storeName: 'VELO MART MINIMARKET',
                     address: 'Jl. Pemuda No. 88, Jakarta',
                     phone: '081234567890',
                     receiptFooter: 'Terima Kasih Atas Kunjungan Anda\nBarang Yang Sudah Dibeli Tidak Dapat Ditukar'
-                };
-
-                await ref.set({
-                    products: initialProducts,
-                    categories: initialCategories,
-                    settings: initialSettings,
-                    transactions: {}
                 });
             }
         }
 
-        // ----------------------------------------------------------------------
-        // MAIN APP COMPONENT
-        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -285,21 +259,17 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
-            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
-            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
-            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
-            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
@@ -310,7 +280,6 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
-            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -319,7 +288,6 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-            // State Modal Input / Edit Produk
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -338,87 +306,77 @@
                 imageUrl: ''
             });
 
-            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
-            // Sinkronisasi Real-Time Firebase Listener
             useEffect(() => {
-                initFirebaseSampleData().then(() => {
-                    const dbRef = firebaseDb.ref('pos_data');
-                    dbRef.on('value', (snapshot) => {
-                        const data = snapshot.val();
-                        if (data) {
-                            if (data.products) {
-                                const prodArray = Object.keys(data.products).map(key => ({
-                                    id: key,
-                                    ...data.products[key]
-                                }));
-                                setProducts(prodArray);
-                            } else {
-                                setProducts([]);
-                            }
-
-                            if (data.categories) {
-                                const catArray = Array.isArray(data.categories) 
-                                    ? data.categories 
-                                    : Object.keys(data.categories).map(key => ({ id: key, ...data.categories[key] }));
-                                setCategories(catArray);
-                            } else {
-                                setCategories([]);
-                            }
-
-                            if (data.transactions) {
-                                const txArray = Object.keys(data.transactions).map(key => ({
-                                    id: key,
-                                    ...data.transactions[key]
-                                }));
-                                setTransactions(txArray);
-                            } else {
-                                setTransactions([]);
-                            }
-
-                            if (data.settings) {
-                                setStoreInfo(data.settings);
-                            }
-                        }
-                    });
+                initSampleData().then(() => {
+                    refreshData();
                 });
             }, []);
+
+            const refreshData = async () => {
+                const p = await db.products.toArray();
+                const c = await db.categories.toArray();
+                const t = await db.transactions.toArray();
+                const s = await db.settings.get('store_info');
+                setProducts(p);
+                setCategories(c);
+                setTransactions(t);
+                if (s) setStoreInfo(s);
+            };
 
             const handleBackupToFirebase = async () => {
                 setIsBackingUp(true);
                 try {
+                    const allProducts = await db.products.toArray();
+                    const allCategories = await db.categories.toArray();
+                    const allTransactions = await db.transactions.toArray();
+                    const storeSetting = await db.settings.get('store_info');
+
+                    const backupData = {
+                        products: allProducts,
+                        categories: allCategories,
+                        transactions: allTransactions,
+                        settings: storeSetting || {},
+                        updatedAt: new Date().toISOString()
+                    };
+
+                    await firebaseDb.ref('pos_backup').set(backupData);
+
                     const nowStr = new Date().toLocaleString('id-ID');
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
-                    alert("✅ Data sudah tersinkronisasi otomatis secara real-time ke Firebase Cloud!");
+
+                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84).");
                 } catch (error) {
                     console.error("Backup Error:", error);
-                    alert("❌ Gagal menyinkronkan data: " + error.message);
+                    alert("❌ Gagal backup ke Firebase: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
             };
 
-            // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
-            // ----------------------------------------------------------------------
+            // STRICT INDEPENDENT BARCODE SCANNER & MUTUAL CAMERA LOCK
             useEffect(() => {
-                let html5QrCode = null;
-
                 if (isScannerOpen) {
-                    const timer = setTimeout(() => {
+                    if (visualStreamRef.current) {
+                        visualStreamRef.current.getTracks().forEach(track => track.stop());
+                        visualStreamRef.current = null;
+                        setIsVisualScanOpen(false);
+                    }
+
+                    setTimeout(() => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem) return;
 
-                        html5QrCode = new Html5Qrcode("reader");
+                        const html5QrCode = new Html5Qrcode("reader");
                         html5QrCodeRef.current = html5QrCode;
 
                         html5QrCode.start(
                             { facingMode: "environment" },
-                            { fps: 20, qrbox: { width: 250, height: 150 } },
+                            { fps: 15, qrbox: { width: 250, height: 150 } },
                             (decodedText) => {
                                 playBeepSound();
                                 const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
@@ -437,15 +395,11 @@
                             setIsScannerOpen(false);
                         });
                     }, 300);
-
-                    return () => clearTimeout(timer);
                 } else {
-                    if (html5QrCodeRef.current) {
-                        if (html5QrCodeRef.current.isScanning) {
-                            html5QrCodeRef.current.stop().then(() => {
-                                html5QrCodeRef.current.clear();
-                            }).catch(e => console.log(e));
-                        }
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().then(() => {
+                            html5QrCodeRef.current.clear();
+                        }).catch(e => console.log(e));
                     }
                 }
 
@@ -456,11 +410,16 @@
                 };
             }, [isScannerOpen, products]);
 
-            // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (DIOPTIMASI AGAR CEPAT & AKURAT)
-            // ----------------------------------------------------------------------
+            // STRICT VISUAL SCAN AI & MUTUAL CAMERA LOCK
             useEffect(() => {
                 if (isVisualScanOpen) {
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().then(() => {
+                            html5QrCodeRef.current.clear();
+                            setIsScannerOpen(false);
+                        }).catch(e => console.log(e));
+                    }
+
                     setAiDetectedName('');
                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
                         .then(stream => {
@@ -489,62 +448,32 @@
             }, [isVisualScanOpen]);
 
             const handleCaptureAndDetectAi = async () => {
-                if (!visualVideoRef.current) return;
+                if (!visualVideoRef.current || isAiLoading) return;
                 setIsAiLoading(true);
-                setAiDetectedName("⚡ Memindai kilat...");
+                setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
                     if (!aiModelRef.current) {
-                        aiModelRef.current = await mobilenet.load({
-                            version: 2,
-                            alpha: 0.5 // Kompresi model agar cepat (sat-set)
-                        });
+                        aiModelRef.current = await mobilenet.load();
                     }
 
-                    const video = visualVideoRef.current;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 224;
-                    canvas.height = 224;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0, 224, 224);
-
-                    const predictions = await aiModelRef.current.classify(canvas);
+                    const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
-                        const topPrediction = predictions[0].className.toLowerCase();
-                        setAiDetectedName(`AI: "${topPrediction}"`);
+                        const topPrediction = predictions[0].className;
+                        setAiDetectedName(`AI Memprediksi: "${topPrediction}"`);
                         
                         playBeepSound();
 
+                        const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         let matchedProduct = null;
-
-                        // 1. Cocokkan langsung dengan nama produk di database
-                        for (let p of products) {
-                            const pName = p.name.toLowerCase();
-                            if (topPrediction.split(', ').some(word => word.length > 2 && pName.includes(word))) {
-                                matchedProduct = p;
-                                break;
-                            }
+                        for (let key of keywords) {
+                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
+                            if (matchedProduct) break;
                         }
 
-                        // 2. Jika belum ketemu, gunakan kamus sinonim lokal
-                        if (!matchedProduct) {
-                            let expandedKeywords = [topPrediction];
-                            Object.keys(kamusSinonimAI).forEach(key => {
-                                if (topPrediction.includes(key) || key.includes(topPrediction)) {
-                                    expandedKeywords = expandedKeywords.concat(kamusSinonimAI[key]);
-                                }
-                            });
-
-                            for (let key of expandedKeywords) {
-                                matchedProduct = products.find(p => p.name.toLowerCase().includes(key.toLowerCase()));
-                                if (matchedProduct) break;
-                            }
-                        }
-
-                        // 3. Fallback cerdas untuk kategori minuman/botol
-                        if (!matchedProduct && (topPrediction.includes('bottle') || topPrediction.includes('water') || topPrediction.includes('drink') || topPrediction.includes('mineral'))) {
-                            matchedProduct = products.find(p => p.category === 'Minuman') || products[0];
+                        if (!matchedProduct && products.length > 0) {
+                            matchedProduct = products[0];
                         }
 
                         if (matchedProduct) {
@@ -552,11 +481,11 @@
                                 addToCart(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                                alert(`✨ Berhasil! Produk "${matchedProduct.name}" dimasukkan ke keranjang.`);
-                            }, 150);
+                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
+                            }, 600);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek "${topPrediction}" terdeteksi, tetapi tidak ada produk yang cocok di database toko.`);
+                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama produk di toko Anda.`);
                         }
                     } else {
                         setIsAiLoading(false);
@@ -565,12 +494,11 @@
                 } catch (error) {
                     console.error("AI Scan Error:", error);
                     setIsAiLoading(false);
-                    setAiDetectedName("Gagal memproses.");
-                    alert("Terjadi kendala pada sistem AI: " + error.message);
+                    setAiDetectedName("Terjadi kesalahan sistem AI.");
+                    alert("Gagal menjalankan AI Scan: " + error.message);
                 }
             };
 
-            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -623,7 +551,6 @@
             };
 
             const filteredTransactions = transactions.filter(t => {
-                if (!t.createdAt) return true;
                 const txDate = new Date(t.createdAt).toISOString().split('T')[0];
                 if (startDate && txDate < startDate) return false;
                 if (endDate && txDate > endDate) return false;
@@ -704,8 +631,8 @@
                 if (!newCategoryInput.trim()) return;
                 const exists = categories.find(c => c.name.toLowerCase() === newCategoryInput.trim().toLowerCase());
                 if (!exists) {
-                    const newCatId = 'cat_' + Date.now();
-                    await firebaseDb.ref('pos_data/categories/' + newCatId).set({ id: newCatId, name: newCategoryInput.trim() });
+                    await db.categories.add({ name: newCategoryInput.trim() });
+                    await refreshData();
                     setProductForm(prev => ({ ...prev, category: newCategoryInput.trim() }));
                 }
                 setNewCategoryInput('');
@@ -742,19 +669,15 @@
                     createdAt: new Date().toISOString()
                 };
 
-                await firebaseDb.ref('pos_data/transactions').push(newTx);
+                await db.transactions.add(newTx);
 
                 for (const item of cart) {
-                    const prod = products.find(p => p.id === item.product.id);
+                    const prod = await db.products.get(item.product.id);
                     if (prod) {
-                        const newStock = Math.max(0, prod.stock - item.qty);
-                        const newTotalSold = (prod.totalSold || 0) + item.qty;
-                        const lastSoldDate = new Date().toISOString().split('T')[0];
-                        
-                        await firebaseDb.ref(`pos_data/products/${prod.id}`).update({
-                            stock: newStock,
-                            totalSold: newTotalSold,
-                            lastSoldDate: lastSoldDate
+                        await db.products.update(item.product.id, { 
+                            stock: Math.max(0, prod.stock - item.qty),
+                            totalSold: (prod.totalSold || 0) + item.qty,
+                            lastSoldDate: new Date().toISOString().split('T')[0]
                         });
                     }
                 }
@@ -764,6 +687,7 @@
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
+                refreshData();
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -796,27 +720,25 @@
                     return;
                 }
 
-                const prodId = productForm.id || ('PROD-' + Date.now());
-                const payload = {
+                await db.products.put({
                     ...productForm,
-                    id: prodId,
                     costPrice: parseFloat(productForm.costPrice) || 0,
                     sellingPrice: parseFloat(productForm.sellingPrice) || 0,
                     stock: parseInt(productForm.stock) || 0,
                     minStock: parseInt(productForm.minStock) || 0,
                     totalSold: productForm.totalSold || 0,
                     lastSoldDate: productForm.lastSoldDate || '-'
-                };
-
-                await firebaseDb.ref(`pos_data/products/${prodId}`).set(payload);
+                });
 
                 setIsProductModalOpen(false);
-                alert("Produk berhasil disimpan dan disinkronkan!");
+                refreshData();
+                alert("Produk berhasil disimpan!");
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
-                    await firebaseDb.ref(`pos_data/products/${id}`).remove();
+                    await db.products.delete(id);
+                    refreshData();
                 }
             };
 
@@ -865,8 +787,6 @@
 
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
-                    
-                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -875,7 +795,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold">● Real-Time Synced</span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold">● Firebase Connected</span>
                                 </div>
                             </div>
 
@@ -902,29 +822,21 @@
                             <button 
                                 onClick={handleBackupToFirebase}
                                 disabled={isBackingUp}
-                                className="w-full py-2.5 px-3 bg-emerald-600/20 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
+                                className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
-                                <i data-lucide="cloud" className="w-4 h-4"></i> 
-                                Sinkronisasi Aktif
+                                <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
+                                {isBackingUp ? 'Memproses Backup...' : 'Backup ke Firebase'}
                             </button>
 
-                            {lowStockProducts.length > 0 && (
-                                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-semibold flex items-center gap-2">
-                                    <span>⚠️</span> <span>{lowStockProducts.length} Produk Stok Habis</span>
-                                </div>
-                            )}
-                            {expiredSoonProducts.length > 0 && (
-                                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-semibold flex items-center gap-2">
-                                    <span>⌛</span> <span>{expiredSoonProducts.length} Produk Mau Expired</span>
-                                </div>
+                            {lastBackupTime && (
+                                <p className="text-[10px] text-slate-400 text-center font-semibold">
+                                    Backup Terakhir:<br/>{lastBackupTime}
+                                </p>
                             )}
                         </div>
                     </aside>
 
-                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-                        
-                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -934,154 +846,49 @@
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-md">
                                         <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Total Omzet</p>
-                                        <p className="text-lg md:text-xl font-black text-indigo-300 mt-1 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                                        <p className="text-lg md:text-xl font-black text-indigo-300 mt-1 tabular-nums">
                                             Rp {transactions.reduce((acc, t) => acc + t.total, 0).toLocaleString('id-ID')}
                                         </p>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-md">
                                         <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Total HPP (Modal)</p>
-                                        <p className="text-lg md:text-xl font-black text-amber-300 mt-1 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                                        <p className="text-lg md:text-xl font-black text-amber-300 mt-1 tabular-nums">
                                             Rp {transactions.reduce((acc, t) => acc + (t.totalCost || 0), 0).toLocaleString('id-ID')}
                                         </p>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-md">
                                         <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Profit (Keuntungan)</p>
-                                        <p className="text-lg md:text-xl font-black text-emerald-300 mt-1 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                                        <p className="text-lg md:text-xl font-black text-emerald-300 mt-1 tabular-nums">
                                             Rp {transactions.reduce((acc, t) => acc + (t.profit || 0), 0).toLocaleString('id-ID')}
                                         </p>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-md">
                                         <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Total Transaksi</p>
-                                        <p className="text-lg md:text-xl font-black text-sky-300 mt-1 tabular-nums whitespace-nowrap">{transactions.length} TRX</p>
+                                        <p className="text-lg md:text-xl font-black text-sky-300 mt-1 tabular-nums">{transactions.length} TRX</p>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
                                         <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian</h3>
-                                        <div className="h-56">
-                                            <canvas ref={salesChartRef}></canvas>
-                                        </div>
+                                        <div className="h-56"><canvas ref={salesChartRef}></canvas></div>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
                                         <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris</h3>
-                                        <div className="h-56">
-                                            <canvas ref={topProductsChartRef}></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* PANEL NOTIFIKASI BARANG STOK MENIPIS & MENDEKATI EXPIRED */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
-                                                <span>⚠️</span> Barang Stok Menipis (Perlu Dibelanjakan)
-                                            </h3>
-                                            <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-500/30">
-                                                {lowStockProducts.length} Barang
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                                            {lowStockProducts.length === 0 ? (
-                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Semua stok barang aman/mencukupi 👍</p>
-                                            ) : (
-                                                lowStockProducts.map(p => (
-                                                    <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
-                                                        <div>
-                                                            <p className="font-bold text-white">{p.name}</p>
-                                                            <p className="text-[10px] text-slate-400">Min. Stok: {p.minStock} Pcs | SKU: {p.sku}</p>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="text-xs font-black text-amber-300 bg-amber-500/20 px-2 py-1 rounded-md border border-amber-500/30 inline-block">
-                                                                Sisa {p.stock} Pcs
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-900 border border-rose-500/30 p-4 rounded-2xl shadow-lg">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h3 className="text-sm font-bold text-rose-300 flex items-center gap-2">
-                                                <span>⌛</span> Barang Mendekati Kadaluwarsa (Expired)
-                                            </h3>
-                                            <span className="text-xs bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-bold border border-rose-500/30">
-                                                {expiredSoonProducts.length} Barang
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                                            {expiredSoonProducts.length === 0 ? (
-                                                <p className="text-xs text-slate-400 text-center py-6 font-semibold">Tidak ada barang yang mendekati expired 👍</p>
-                                            ) : (
-                                                expiredSoonProducts.map(p => {
-                                                    const diffDays = Math.ceil((new Date(p.expiredDate) - new Date()) / (1000 * 60 * 60 * 24));
-                                                    return (
-                                                        <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
-                                                            <div>
-                                                                <p className="font-bold text-white">{p.name}</p>
-                                                                <p className="text-[10px] text-slate-400">Tgl Exp: <span className="text-rose-300 font-bold">{p.expiredDate}</span></p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="text-xs font-black text-rose-300 bg-rose-500/20 px-2 py-1 rounded-md border border-rose-500/30 inline-block">
-                                                                    {diffDays <= 0 ? 'Sudah Expired' : `${diffDays} Hari Lagi`}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* PANEL BARANG TERLARIS & PALING LAMA TIDAK TERJUAL YANG DIPULIHKAN */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                                        <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
-                                        <div className="space-y-2">
-                                            {[...products].sort((a,b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0,3).map(p => (
-                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
-                                                    <span className="font-bold text-white pr-2 truncate">{p.name}</span>
-                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-                                        <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
-                                        <div className="space-y-2">
-                                            {[...products].sort((a,b) => (a.totalSold || 0) - (b.totalSold || 0)).slice(0,3).map(p => (
-                                                <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
-                                                    <div className="pr-2 truncate">
-                                                        <p className="font-bold text-white truncate">{p.name}</p>
-                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate || '-'}</p>
-                                                    </div>
-                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        <div className="h-56"><canvas ref={topProductsChartRef}></canvas></div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
-                                
                                 <div className="flex-1 flex flex-col p-4 overflow-hidden">
-                                    
                                     <div className="relative mb-4 flex gap-2">
                                         <div className="relative flex-1">
                                             <input 
                                                 type="text"
-                                                placeholder="Ketik 1 huruf/angka, nama, barcode, atau SKU..."
+                                                placeholder="Ketik nama, barcode, atau SKU..."
                                                 value={searchQuery}
                                                 onChange={e => setSearchQuery(e.target.value)}
                                                 className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner"
@@ -1104,7 +911,6 @@
                                         </button>
                                     </div>
 
-                                    {/* PANEL MODAL KAMERA SCANNER BARCODE */}
                                     {isScannerOpen && (
                                         <div className="mb-4 bg-slate-900 p-3 rounded-2xl border border-indigo-500/50 shadow-2xl relative">
                                             <div className="flex justify-between items-center mb-2">
@@ -1124,13 +930,13 @@
                                                 <div 
                                                     key={prod.id}
                                                     onClick={() => addToCart(prod)}
-                                                    className="p-3 hover:bg-indigo-600/30 border-b border-slate-800 last:border-none cursor-pointer flex justify-between items-center transition"
+                                                    className="p-3 hover:bg-indigo-600/30 border-b border-slate-800 cursor-pointer flex justify-between items-center transition"
                                                 >
                                                     <div className="pr-2 truncate">
                                                         <p className="font-bold text-sm text-white truncate">{prod.name}</p>
-                                                        <p className="text-xs text-slate-400">SKU: {prod.sku} | Barcode: {prod.barcode} | Stok: {prod.stock}</p>
+                                                        <p className="text-xs text-slate-400">SKU: {prod.sku} | Stok: {prod.stock}</p>
                                                     </div>
-                                                    <span className="text-indigo-300 font-black text-xs sm:text-sm whitespace-nowrap shrink-0 ml-2">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
+                                                    <span className="text-indigo-300 font-black text-xs sm:text-sm">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1146,17 +952,13 @@
                                                 >
                                                     <div>
                                                         <div className="h-20 bg-slate-950 rounded-xl mb-2 flex items-center justify-center text-slate-500 overflow-hidden border border-slate-800">
-                                                            <ProductImage 
-                                                                src={prod.imageUrl} 
-                                                                alt={prod.name} 
-                                                                className="w-full h-full"
-                                                            />
+                                                            <ProductImage src={prod.imageUrl} alt={prod.name} className="w-full h-full" />
                                                         </div>
                                                         <p className="font-bold text-xs text-white line-clamp-2">{prod.name}</p>
                                                     </div>
                                                     <div className="mt-2 flex justify-between items-center gap-1">
                                                         <span className="text-[10px] text-slate-400 font-semibold">Stok: {prod.stock}</span>
-                                                        <span className="font-black text-indigo-300 text-xs shrink-0 whitespace-nowrap">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
+                                                        <span className="font-black text-indigo-300 text-xs">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -1183,7 +985,7 @@
                                                     <div key={product.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
                                                         <div className="flex-1 min-w-0 pr-1">
                                                             <p className="text-xs font-bold text-white truncate">{product.name}</p>
-                                                            <p className="text-xs text-indigo-300 font-black tabular-nums whitespace-nowrap mt-0.5 max-w-[110px] truncate">
+                                                            <p className="text-xs text-indigo-300 font-black tabular-nums">
                                                                 Rp {(product.sellingPrice * qty).toLocaleString('id-ID')}
                                                             </p>
                                                         </div>
@@ -1201,14 +1003,14 @@
                                     <div className="pt-3 border-t border-slate-800 space-y-3">
                                         <div className="flex justify-between items-center text-base font-extrabold text-white pt-1">
                                             <span>Total Akhir</span>
-                                            <span className="text-indigo-300 font-black text-base sm:text-lg tabular-nums whitespace-nowrap shrink-0 pl-2">
+                                            <span className="text-indigo-300 font-black text-base sm:text-lg tabular-nums">
                                                 Rp {grandTotal.toLocaleString('id-ID')}
                                             </span>
                                         </div>
                                         <button 
                                             disabled={cart.length === 0}
                                             onClick={() => setIsPaymentModalOpen(true)}
-                                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 font-black text-white rounded-xl shadow-lg shadow-indigo-600/30 text-sm transition"
+                                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 font-black text-white rounded-xl shadow-lg shadow-indigo-600/30 text-sm transition"
                                         >
                                             Bayar Sekarang
                                         </button>
@@ -1217,7 +1019,6 @@
                             </div>
                         )}
 
-                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1238,10 +1039,9 @@
                                                     <th className="p-3">Foto</th>
                                                     <th className="p-3">SKU / Barcode</th>
                                                     <th className="p-3">Nama Produk</th>
-                                                    <th className="p-3">Harga Modal (HPP)</th>
+                                                    <th className="p-3">Harga Modal</th>
                                                     <th className="p-3">Harga Jual</th>
                                                     <th className="p-3">Stok</th>
-                                                    <th className="p-3">Expired</th>
                                                     <th className="p-3 text-center">Aksi</th>
                                                 </tr>
                                             </thead>
@@ -1250,31 +1050,18 @@
                                                     <tr key={p.id} className="hover:bg-slate-800/50 transition">
                                                         <td className="p-3">
                                                             <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
-                                                                <ProductImage 
-                                                                    src={p.imageUrl} 
-                                                                    alt={p.name} 
-                                                                    className="w-full h-full"
-                                                                />
+                                                                <ProductImage src={p.imageUrl} alt={p.name} className="w-full h-full" />
                                                             </div>
                                                         </td>
-                                                        <td className="p-3 font-mono text-slate-300">{p.sku}<br/><span className="text-[10px] text-slate-400">{p.barcode}</span></td>
+                                                        <td className="p-3 font-mono text-slate-300">{p.sku}</td>
                                                         <td className="p-3 font-bold text-white">{p.name}</td>
-                                                        <td className="p-3 text-amber-300 font-extrabold whitespace-nowrap">Rp {p.costPrice ? p.costPrice.toLocaleString('id-ID') : 0}</td>
-                                                        <td className="p-3 font-black text-indigo-300 whitespace-nowrap">Rp {p.sellingPrice.toLocaleString('id-ID')}</td>
-                                                        <td className="p-3 font-extrabold">
-                                                            <span className={`px-2.5 py-1 rounded-md text-[10px] ${p.stock <= p.minStock ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
-                                                                {p.stock} Pcs
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-3 text-slate-300">{p.expiredDate || '-'}</td>
+                                                        <td className="p-3 text-amber-300 font-extrabold">Rp {(p.costPrice || 0).toLocaleString('id-ID')}</td>
+                                                        <td className="p-3 font-black text-indigo-300">Rp {p.sellingPrice.toLocaleString('id-ID')}</td>
+                                                        <td className="p-3 font-extrabold">{p.stock} Pcs</td>
                                                         <td className="p-3 text-center">
                                                             <div className="flex justify-center gap-2">
-                                                                <button onClick={() => handleOpenProductModal(p)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg">
-                                                                    <i data-lucide="edit" className="w-3.5 h-3.5"></i>
-                                                                </button>
-                                                                <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-lg">
-                                                                    <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
-                                                                </button>
+                                                                <button onClick={() => handleOpenProductModal(p)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg"><i data-lucide="edit" className="w-3.5 h-3.5"></i></button>
+                                                                <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-lg"><i data-lucide="trash-2" className="w-3.5 h-3.5"></i></button>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -1286,302 +1073,49 @@
                             </div>
                         )}
 
-                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
-                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <div className="flex justify-between items-center">
                                     <h2 className="text-2xl font-black text-white">Laporan Transaksi Penjualan</h2>
-                                    
-                                    <button 
-                                        onClick={exportToExcel}
-                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition"
-                                    >
-                                        <i data-lucide="download" className="w-4 h-4"></i> Ekspor ke Excel (.xlsx)
+                                    <button onClick={exportToExcel} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2">
+                                        <i data-lucide="download" className="w-4 h-4"></i> Ekspor ke Excel
                                     </button>
-                                </div>
-
-                                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-md">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-xs text-slate-400 font-bold mr-1">Filter Cepat:</span>
-                                        {[
-                                            { key: 'ALL', label: 'Semua Transaksi' },
-                                            { key: 'TODAY', label: 'Hari Ini' },
-                                            { key: 'YESTERDAY', label: 'Kemarin' },
-                                            { key: 'LAST_7', label: '7 Hari Terakhir' },
-                                            { key: 'LAST_30', label: '30 Hari Terakhir' }
-                                        ].map(item => (
-                                            <button
-                                                key={item.key}
-                                                onClick={() => handleApplyPreset(item.key)}
-                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                                                    datePreset === item.key 
-                                                        ? 'bg-indigo-600 border-indigo-500 text-white shadow' 
-                                                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                                                }`}
-                                            >
-                                                {item.label}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-800/80">
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Dari Tanggal</label>
-                                            <input 
-                                                type="date" 
-                                                value={startDate} 
-                                                onChange={e => { setStartDate(e.target.value); setDatePreset('CUSTOM'); }} 
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Sampai Tanggal</label>
-                                            <input 
-                                                type="date" 
-                                                value={endDate} 
-                                                onChange={e => { setEndDate(e.target.value); setDatePreset('CUSTOM'); }} 
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div className="flex gap-2 w-full sm:w-auto self-end">
-                                            <button 
-                                                onClick={() => handleApplyPreset('ALL')}
-                                                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold w-full sm:w-auto"
-                                            >
-                                                Reset Filter
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div className="p-3.5 bg-indigo-500/15 border border-indigo-500/30 rounded-xl text-xs text-indigo-200 font-bold flex justify-between items-center shadow-sm">
-                                        <span>Total Omzet Penjualan:</span>
-                                        <span className="text-xs sm:text-sm font-black text-indigo-300 shrink-0 whitespace-nowrap ml-2">Rp {totalOmzetFilter.toLocaleString('id-ID')}</span>
-                                    </div>
-                                    <div className="p-3.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-200 font-bold flex justify-between items-center shadow-sm">
-                                        <span>Total HPP (Modal):</span>
-                                        <span className="text-xs sm:text-sm font-black text-amber-300 shrink-0 whitespace-nowrap ml-2">Rp {totalHppFilter.toLocaleString('id-ID')}</span>
-                                    </div>
-                                    <div className="p-3.5 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 font-bold flex justify-between items-center shadow-sm">
-                                        <span>Profit / Keuntungan Bersih:</span>
-                                        <span className="text-xs sm:text-sm font-black text-emerald-300 shrink-0 whitespace-nowrap ml-2">Rp {totalProfitFilter.toLocaleString('id-ID')}</span>
-                                    </div>
-                                </div>
-
-                                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-xs text-slate-200">
-                                            <thead className="bg-slate-950 text-slate-300 uppercase font-bold border-b border-slate-800">
-                                                <tr>
-                                                    <th className="p-3">No TRX</th>
-                                                    <th className="p-3">Waktu</th>
-                                                    <th className="p-3">Kasir / Pelanggan</th>
-                                                    <th className="p-3 text-right">Total Omzet</th>
-                                                    <th className="p-3 text-right">Total HPP</th>
-                                                    <th className="p-3 text-right">Profit</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-800/80 font-medium">
-                                                {filteredTransactions.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan="6" className="p-6 text-center text-slate-400 font-semibold">Tidak ada data transaksi pada rentang tanggal ini.</td>
-                                                    </tr>
-                                                ) : (
-                                                    filteredTransactions.slice().reverse().map(t => (
-                                                        <tr key={t.id} className="hover:bg-slate-800/50 transition">
-                                                            <td className="p-3 font-mono text-indigo-300 font-bold">{t.transactionNo}</td>
-                                                            <td className="p-3 text-slate-300">{new Date(t.createdAt).toLocaleString('id-ID')}</td>
-                                                            <td className="p-3">
-                                                                <p className="font-bold text-white">Kasir: {t.cashierName || '-'}</p>
-                                                                <p className="text-[10px] text-slate-400">Pelanggan: {t.customerName || '-'}</p>
-                                                            </td>
-                                                            <td className="p-3 text-right font-black text-indigo-300 whitespace-nowrap">Rp {t.total.toLocaleString('id-ID')}</td>
-                                                            <td className="p-3 text-right text-amber-300 font-bold whitespace-nowrap">Rp {(t.totalCost || 0).toLocaleString('id-ID')}</td>
-                                                            <td className="p-3 text-right font-black text-emerald-300 whitespace-nowrap">Rp {(t.profit || 0).toLocaleString('id-ID')}</td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
-                                <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
-
+                                <h2 className="text-2xl font-black text-white">Pengaturan Toko</h2>
                                 <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 max-w-lg shadow-lg">
                                     <div>
-                                        <label className="text-xs font-bold text-slate-300">Nama Toko Minimarket</label>
+                                        <label className="text-xs font-bold text-slate-300">Nama Toko</label>
                                         <input type="text" value={storeInfo.storeName || ''} onChange={e => setStoreInfo({...storeInfo, storeName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1"/>
                                     </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-300">Nomor Telepon / WA Toko</label>
-                                        <input type="text" value={storeInfo.phone || ''} onChange={e => setStoreInfo({...storeInfo, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1" placeholder="Contoh: 0812-3456-7890"/>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-300">Alamat Lengkap Toko</label>
-                                        <input type="text" value={storeInfo.address || ''} onChange={e => setStoreInfo({...storeInfo, address: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1"/>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
-                                        <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
-                                    </div>
-                                    <button onClick={async () => { await firebaseDb.ref('pos_data/settings').set({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
-                                        Simpan Pengaturan
-                                    </button>
+                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs">Simpan</button>
                                 </div>
                             </div>
                         )}
 
-                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
-                            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
-                                <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
-                            </button>
-                            <button onClick={() => setActiveTab('products')} className={`flex flex-col items-center text-[10px] ${activeTab === 'products' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
-                                <i data-lucide="box" className="w-5 h-5"></i> Produk
-                            </button>
-                            <button onClick={() => setActiveTab('pos')} className={`flex flex-col items-center text-[10px] ${activeTab === 'pos' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
-                                <i data-lucide="shopping-cart" className="w-5 h-5"></i> POS
-                            </button>
-                            <button onClick={() => setActiveTab('reports')} className={`flex flex-col items-center text-[10px] ${activeTab === 'reports' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
-                                <i data-lucide="file-text" className="w-5 h-5"></i> Laporan
-                            </button>
-                            <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center text-[10px] ${activeTab === 'settings' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
-                                <i data-lucide="settings" className="w-5 h-5"></i> Setting
-                            </button>
+                            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}><i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard</button>
+                            <button onClick={() => setActiveTab('products')} className={`flex flex-col items-center text-[10px] ${activeTab === 'products' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}><i data-lucide="box" className="w-5 h-5"></i> Produk</button>
+                            <button onClick={() => setActiveTab('pos')} className={`flex flex-col items-center text-[10px] ${activeTab === 'pos' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}><i data-lucide="shopping-cart" className="w-5 h-5"></i> POS</button>
+                            <button onClick={() => setActiveTab('reports')} className={`flex flex-col items-center text-[10px] ${activeTab === 'reports' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}><i data-lucide="file-text" className="w-5 h-5"></i> Laporan</button>
+                            <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center text-[10px] ${activeTab === 'settings' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}><i data-lucide="settings" className="w-5 h-5"></i> Setting</button>
                         </div>
-
                     </main>
 
-                    {/* MODAL INPUT / EDIT PRODUK */}
+                    {/* MODAL PRODUK */}
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
-                                <h3 className="font-bold text-white text-sm">
-                                    {productForm.id ? 'Edit Data Produk' : 'Tambah Produk Baru'}
-                                </h3>
-                                
+                                <h3 className="font-bold text-white text-sm">{productForm.id ? 'Edit Data Produk' : 'Tambah Produk Baru'}</h3>
                                 <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
                                     <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-slate-300 font-bold">Foto Produk</label>
-                                            <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setImageInputMode('file')}
-                                                    className={`px-2 py-1 rounded text-[10px] font-bold ${imageInputMode === 'file' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-                                                >
-                                                    📁 Galeri HP
-                                                </button>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setImageInputMode('url')}
-                                                    className={`px-2 py-1 rounded text-[10px] font-bold ${imageInputMode === 'url' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-                                                >
-                                                    🔗 Link URL
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-16 h-16 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center shrink-0">
-                                                <ProductImage 
-                                                    src={productForm.imageUrl} 
-                                                    alt="Preview" 
-                                                    className="w-full h-full"
-                                                />
-                                            </div>
-
-                                            {imageInputMode === 'file' ? (
-                                                <input 
-                                                    type="file" 
-                                                    accept="image/*" 
-                                                    onChange={handleImageUpload} 
-                                                    className="text-xs text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600/20 file:text-indigo-300 hover:file:bg-indigo-600 hover:file:text-white transition cursor-pointer" 
-                                                />
-                                            ) : (
-                                                <input 
-                                                    type="url" 
-                                                    placeholder="Tempel Link Gambar (Google Drive, Web, dll)" 
-                                                    value={productForm.imageUrl} 
-                                                    onChange={e => setProductForm({...productForm, imageUrl: e.target.value})} 
-                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div>
                                         <label className="text-slate-300 font-bold">Nama Produk *</label>
-                                        <input type="text" required value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1" placeholder="Contoh: Kopi Susu Aren"/>
+                                        <input type="text" required value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"/>
                                     </div>
-
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-slate-300 font-bold">Kategori</label>
-                                            <button type="button" onClick={() => setIsAddingNewCategory(!isAddingNewCategory)} className="text-indigo-300 text-[11px] font-bold hover:underline">
-                                                {isAddingNewCategory ? 'Batal' : '+ Tambah Kategori'}
-                                            </button>
-                                        </div>
-
-                                        {isAddingNewCategory ? (
-                                            <div className="flex gap-2">
-                                                <input type="text" placeholder="Nama Kategori Baru" value={newCategoryInput} onChange={e => setNewCategoryInput(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-semibold" />
-                                                <button type="button" onClick={handleAddCategory} className="px-3 py-2 bg-indigo-600 text-white rounded-xl font-bold">Simpan</button>
-                                            </div>
-                                        ) : (
-                                            <select value={productForm.category} onChange={e => setProductForm({...productForm, category: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold">
-                                                {categories.map(c => (
-                                                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-slate-300 font-bold">SKU</label>
-                                            <input type="text" value={productForm.sku} onChange={e => setProductForm({...productForm, sku: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"/>
-                                        </div>
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Barcode</label>
-                                            <input type="text" value={productForm.barcode} onChange={e => setProductForm({...productForm, barcode: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"/>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Harga Modal / HPP (Rp) *</label>
-                                            <input type="number" required value={productForm.costPrice} onChange={e => setProductForm({...productForm, costPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Harga Jual (Rp) *</label>
-                                            <input type="number" required value={productForm.sellingPrice} onChange={e => setProductForm({...productForm, sellingPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Stok Awal</label>
-                                            <input type="number" value={productForm.stock} onChange={e => setProductForm({...productForm, stock: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Minimum Stok</label>
-                                            <input type="number" value={productForm.minStock} onChange={e => setProductForm({...productForm, minStock: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Tanggal Expired</label>
-                                        <input type="date" value={productForm.expiredDate} onChange={e => setProductForm({...productForm, expiredDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"/>
-                                    </div>
-
                                     <div className="flex gap-2 pt-2">
                                         <button type="button" onClick={() => setIsProductModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold">Batal</button>
                                         <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold">Simpan Produk</button>
@@ -1591,7 +1125,7 @@
                         </div>
                     )}
 
-                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI) */}
+                    {/* MODAL VISUAL SCAN AI */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
@@ -1600,16 +1134,9 @@
                                 </h3>
 
                                 <div className="border-2 border-indigo-500/50 rounded-2xl overflow-hidden bg-slate-950 h-56 relative flex items-center justify-center">
-                                    <video 
-                                        ref={visualVideoRef} 
-                                        autoPlay 
-                                        playsInline 
-                                        muted 
-                                        className="w-full h-full object-cover"
-                                    ></video>
-
+                                    <video ref={visualVideoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
                                     {isAiLoading && (
-                                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
+                                        <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-3">
                                             <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
                                             <p className="text-xs font-bold text-indigo-300 animate-pulse">Proses Identifikasi AI...</p>
                                         </div>
@@ -1617,23 +1144,14 @@
                                 </div>
 
                                 {aiDetectedName && (
-                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">
-                                        {aiDetectedName}
-                                    </p>
+                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">{aiDetectedName}</p>
                                 )}
 
                                 <div className="space-y-2">
-                                    <button 
-                                        onClick={handleCaptureAndDetectAi}
-                                        disabled={isAiLoading}
-                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
-                                    >
-                                        <i data-lucide="sparkles" className="w-4 h-4"></i>
-                                        {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
+                                    <button onClick={handleCaptureAndDetectAi} disabled={isAiLoading} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2">
+                                        <i data-lucide="sparkles" className="w-4 h-4"></i> Ambil Foto & Deteksi AI
                                     </button>
-                                    <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Tutup
-                                    </button>
+                                    <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Tutup</button>
                                 </div>
                             </div>
                         </div>
@@ -1644,147 +1162,44 @@
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
                                 <h3 className="font-bold text-white text-base">Pembayaran Kasir</h3>
-                                
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Nama Kasir (Opsional)</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Contoh: Budi"
-                                            value={cashierInput}
-                                            onChange={e => setCashierInput(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Pelanggan (Opsional)</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Contoh: Pak Andi"
-                                            value={customerInput}
-                                            onChange={e => setCustomerInput(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"
-                                        />
-                                    </div>
-                                </div>
-
                                 <div>
-                                    <label className="text-xs text-slate-300 font-bold">Metode Pembayaran</label>
-                                    <div className="grid grid-cols-3 gap-2 mt-1">
-                                        {['CASH', 'QRIS', 'DEBIT'].map(m => (
-                                            <button 
-                                                key={m} 
-                                                onClick={() => setPaymentMethod(m)} 
-                                                className={`py-2 rounded-xl text-xs font-extrabold border transition ${paymentMethod === m ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
-                                            >
-                                                {m}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <label className="text-xs text-slate-300 font-bold">Uang Diterima (Rp)</label>
+                                    <input type="number" placeholder={grandTotal.toString()} value={cashPaid} onChange={e => setCashPaid(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-black text-lg mt-1"/>
                                 </div>
-
-                                {paymentMethod === 'CASH' && (
-                                    <div>
-                                        <label className="text-xs text-slate-300 font-bold">Uang Diterima (Rp)</label>
-                                        <input 
-                                            type="number" 
-                                            placeholder={grandTotal.toString()}
-                                            value={cashPaid}
-                                            onChange={e => setCashPaid(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-black text-lg sm:text-xl tabular-nums mt-1"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="p-3.5 bg-slate-950 rounded-xl space-y-1.5 text-xs border border-slate-800">
-                                    <div className="flex justify-between items-center text-slate-300 font-semibold gap-2">
-                                        <span>Total Tagihan:</span>
-                                        <span className="font-black text-indigo-300 text-xs sm:text-sm tabular-nums whitespace-nowrap shrink-0">Rp {grandTotal.toLocaleString('id-ID')}</span>
-                                    </div>
-                                    {paymentMethod === 'CASH' && (
-                                        <div className="flex justify-between items-center text-slate-300 font-semibold gap-2">
-                                            <span>Kembalian:</span>
-                                            <span className="font-black text-emerald-300 text-xs sm:text-sm tabular-nums whitespace-nowrap shrink-0">
-                                                Rp {Math.max(0, (parseFloat(cashPaid) || grandTotal) - grandTotal).toLocaleString('id-ID')}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
                                 <div className="flex gap-2">
                                     <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
-                                    <button onClick={handleCompletePayment} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30">Selesaikan & Cetak</button>
+                                    <button onClick={handleCompletePayment} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold">Selesaikan & Cetak</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL CETAK STRUK */}
+                    {/* MODAL STRUK */}
                     {isReceiptModalOpen && lastCompletedTx && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
                                 <h3 className="font-bold text-white text-sm text-center">Struk Transaksi Minimarket</h3>
-                                
                                 <div id="receipt-print-area" className="bg-white text-black p-3.5 rounded-xl receipt-font text-[11px] space-y-2 border border-slate-300 font-bold">
                                     <div className="text-center font-extrabold">
-                                        <p className="text-xs sm:text-sm uppercase">{storeInfo.storeName || 'VELO MART MINIMARKET'}</p>
+                                        <p className="text-xs uppercase">{storeInfo.storeName || 'VELO MART MINIMARKET'}</p>
                                         <p className="font-semibold text-[9.5px]">{storeInfo.address}</p>
-                                        {storeInfo.phone && <p className="font-semibold text-[9.5px]">Telp: {storeInfo.phone}</p>}
-                                        <p className="tracking-tighter">------------------------------</p>
                                     </div>
-                                    <div className="space-y-0.5 text-[9.5px] font-bold">
-                                        <p>No TRX : {lastCompletedTx.transactionNo}</p>
-                                        <p>Tgl    : {new Date(lastCompletedTx.createdAt).toLocaleString('id-ID')}</p>
-                                        {lastCompletedTx.cashierName && <p>Kasir  : {lastCompletedTx.cashierName}</p>}
-                                        {lastCompletedTx.customerName && <p>Pelang : {lastCompletedTx.customerName}</p>}
-                                        <p className="tracking-tighter">------------------------------</p>
-                                    </div>
-
                                     <div className="space-y-1.5 text-[11px]">
                                         {lastCompletedTx.items.map((item, i) => (
-                                            <div key={i}>
-                                                <p className="font-extrabold break-words leading-tight">{item.name}</p>
-                                                <div className="flex justify-between items-center text-[10px] font-bold mt-0.5 pr-1">
-                                                    <span className="whitespace-nowrap shrink-0">{item.qty} x {item.price.toLocaleString('id-ID')}</span>
-                                                    <span className="font-black whitespace-nowrap ml-1 shrink-0">Rp {item.subtotal.toLocaleString('id-ID')}</span>
-                                                </div>
+                                            <div key={i} className="flex justify-between items-center text-[10px]">
+                                                <span>{item.qty}x {item.name}</span>
+                                                <span>Rp {item.subtotal.toLocaleString('id-ID')}</span>
                                             </div>
                                         ))}
                                     </div>
-
-                                    <div className="pt-1 text-[11px] space-y-0.5">
-                                        <p className="tracking-tighter">------------------------------</p>
-                                        <div className="flex justify-between items-center font-black text-xs pr-1">
-                                            <span className="shrink-0">TOTAL</span>
-                                            <span className="whitespace-nowrap shrink-0 font-black">Rp {lastCompletedTx.total.toLocaleString('id-ID')}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-[10px] font-bold pr-1">
-                                            <span className="shrink-0">Bayar ({lastCompletedTx.paymentMethod})</span>
-                                            <span className="whitespace-nowrap shrink-0">Rp {lastCompletedTx.paid.toLocaleString('id-ID')}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-[10px] font-bold pr-1">
-                                            <span className="shrink-0">Kembali</span>
-                                            <span className="whitespace-nowrap shrink-0">Rp {lastCompletedTx.change.toLocaleString('id-ID')}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="text-center pt-2 text-[9.5px] font-semibold">
-                                        <p className="whitespace-pre-line">{storeInfo.receiptFooter}</p>
-                                    </div>
                                 </div>
-
                                 <div className="flex gap-2">
-                                    <button onClick={() => window.print()} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-lg shadow-indigo-600/30">
-                                        <i data-lucide="printer" className="w-4 h-4"></i> Cetak Struk
-                                    </button>
-                                    <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Selesai
-                                    </button>
+                                    <button onClick={() => window.print()} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold">Cetak Struk</button>
+                                    <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 px-4 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Selesai</button>
                                 </div>
                             </div>
                         </div>
                     )}
-
                 </div>
             );
         }
