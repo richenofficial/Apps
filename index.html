@@ -182,7 +182,6 @@
             );
         }
 
-        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -200,9 +199,6 @@
             }
         }
 
-        // ----------------------------------------------------------------------
-        // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
-        // ----------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyCk2xwtT9BGIEm520yJqfkSTDED1mOmt4M",
             authDomain: "fpos-8da84.firebaseapp.com",
@@ -219,9 +215,6 @@
         }
         const firebaseDb = firebase.database();
 
-        // ----------------------------------------------------------------------
-        // DATABASE LOKAL INDEXEDDB (Dexie.js)
-        // ----------------------------------------------------------------------
         const db = new Dexie("VeloPOSProDB");
         db.version(4).stores({
             products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl, units',
@@ -356,9 +349,6 @@
             }
         }
 
-        // ----------------------------------------------------------------------
-        // MAIN APP COMPONENT
-        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -366,25 +356,20 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
-            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
-            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
-            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
-            // State Pilihan Satuan Multi saat Transaksi (Modal Satuan & Konversi)
             const [isUnitSelectModalOpen, setIsUnitSelectModalOpen] = useState(false);
             const [selectedProductForUnit, setSelectedProductForUnit] = useState(null);
 
-            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
@@ -395,7 +380,6 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
-            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -404,7 +388,6 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-            // State Modal Input / Edit Produk (Dengan Multi Satuan & Konversi Custom)
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -424,7 +407,6 @@
                 units: [{ name: 'Pcs', isi: 1, costPrice: 0, sellingPrice: 0 }]
             });
 
-            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
@@ -448,7 +430,6 @@
                 if (s) setStoreInfo(s);
             };
 
-            // TARIK DATA DARI FIREBASE CLOUD SAAT PERTAMA KALI DIBUKA
             const fetchAndApplyCloudData = async () => {
                 try {
                     const snapshot = await firebaseDb.ref('pos_backup').once('value');
@@ -477,7 +458,6 @@
                 }
             };
 
-            // AUTO SYNC REAL-TIME LISTENER DARI FIREBASE KE SEMUA DEVICE
             const setupRealtimeSync = () => {
                 firebaseDb.ref('pos_backup').on('value', async (snapshot) => {
                     const data = snapshot.val();
@@ -533,14 +513,18 @@
                 }
             };
 
-            // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
-            // ----------------------------------------------------------------------
+            // SCANNER BARCODE ORIGINAL YANG DIKEMBALIKAN SEMPURNA
             useEffect(() => {
                 if (isScannerOpen) {
                     setTimeout(() => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem) return;
+
+                        if (html5QrCodeRef.current) {
+                            try {
+                                html5QrCodeRef.current.clear();
+                            } catch (e) {}
+                        }
 
                         const html5QrCode = new Html5Qrcode("reader");
                         html5QrCodeRef.current = html5QrCode;
@@ -567,23 +551,32 @@
                         });
                     }, 300);
                 } else {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
-                        }).catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        if (html5QrCodeRef.current.isScanning) {
+                            html5QrCodeRef.current.stop().then(() => {
+                                html5QrCodeRef.current.clear();
+                            }).catch(e => console.log(e));
+                        } else {
+                            try {
+                                html5QrCodeRef.current.clear();
+                            } catch (e) {}
+                        }
                     }
                 }
 
                 return () => {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        try {
+                            if (html5QrCodeRef.current.isScanning) {
+                                html5QrCodeRef.current.stop().catch(e => console.log(e));
+                            }
+                            html5QrCodeRef.current.clear();
+                        } catch (e) {}
                     }
                 };
             }, [isScannerOpen, products]);
 
-            // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
-            // ----------------------------------------------------------------------
+            // VISUAL SCAN AI ORIGINAL YANG DIKEMBALIKAN SEMPURNA
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -666,7 +659,6 @@
                 }
             };
 
-            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -1005,7 +997,6 @@
                 }
             };
 
-            // GRAFIK DASHBOARD DINAMIK SESUAI DATA NYATA TRANSAKSI & PRODUK
             useEffect(() => {
                 if (activeTab === 'dashboard' && salesChartRef.current && topProductsChartRef.current) {
                     if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
@@ -1100,7 +1091,6 @@
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
                     
-                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -1132,7 +1122,6 @@
                             </nav>
                         </div>
 
-                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -1162,10 +1151,8 @@
                         </div>
                     </aside>
 
-                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
                         
-                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1317,7 +1304,6 @@
                             </div>
                         )}
 
-                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
                                 
@@ -1464,7 +1450,6 @@
                             </div>
                         )}
 
-                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1539,7 +1524,6 @@
                             </div>
                         )}
 
-                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1662,7 +1646,6 @@
                             </div>
                         )}
 
-                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
@@ -1708,7 +1691,6 @@
                             </div>
                         )}
 
-                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
                             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
                                 <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
