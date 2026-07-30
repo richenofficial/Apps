@@ -413,9 +413,7 @@
 
             useEffect(() => {
                 initSampleData().then(() => {
-                    fetchAndApplyCloudData().then(() => {
-                        setupRealtimeSync();
-                    });
+                    refreshData();
                 });
             }, []);
 
@@ -428,58 +426,6 @@
                 setCategories(c);
                 setTransactions(t);
                 if (s) setStoreInfo(s);
-            };
-
-            const fetchAndApplyCloudData = async () => {
-                try {
-                    const snapshot = await firebaseDb.ref('pos_backup').once('value');
-                    const data = snapshot.val();
-                    if (data) {
-                        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-                            await db.products.clear();
-                            await db.products.bulkPut(data.products);
-                        }
-                        if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
-                            await db.categories.clear();
-                            await db.categories.bulkPut(data.categories);
-                        }
-                        if (data.transactions && Array.isArray(data.transactions)) {
-                            await db.transactions.clear();
-                            await db.transactions.bulkPut(data.transactions);
-                        }
-                        if (data.settings) {
-                            await db.settings.put({ ...data.settings, id: 'store_info' });
-                        }
-                    }
-                    await refreshData();
-                } catch (error) {
-                    console.error("Gagal menarik data cloud:", error);
-                    await refreshData();
-                }
-            };
-
-            const setupRealtimeSync = () => {
-                firebaseDb.ref('pos_backup').on('value', async (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        if (data.products && Array.isArray(data.products)) {
-                            await db.products.clear();
-                            await db.products.bulkPut(data.products);
-                        }
-                        if (data.categories && Array.isArray(data.categories)) {
-                            await db.categories.clear();
-                            await db.categories.bulkPut(data.categories);
-                        }
-                        if (data.transactions && Array.isArray(data.transactions)) {
-                            await db.transactions.clear();
-                            await db.transactions.bulkPut(data.transactions);
-                        }
-                        if (data.settings) {
-                            await db.settings.put({ ...data.settings, id: 'store_info' });
-                        }
-                        refreshData();
-                    }
-                });
             };
 
             const handleBackupToFirebase = async () => {
@@ -504,27 +450,23 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah disinkronkan ke Firebase Cloud (fpos-8da84)[cite: 1].");
+                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84)[cite: 1].");
                 } catch (error) {
                     console.error("Backup Error:", error);
-                    alert("❌ Gagal sinkronisasi ke Firebase: " + error.message);
+                    alert("❌ Gagal backup ke Firebase: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
             };
 
-            // SCANNER BARCODE ORIGINAL YANG DIKEMBALIKAN SEMPURNA
+            // ----------------------------------------------------------------------
+            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME (ORIGINAL SEMPURNA)
+            // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isScannerOpen) {
                     setTimeout(() => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem) return;
-
-                        if (html5QrCodeRef.current) {
-                            try {
-                                html5QrCodeRef.current.clear();
-                            } catch (e) {}
-                        }
 
                         const html5QrCode = new Html5Qrcode("reader");
                         html5QrCodeRef.current = html5QrCode;
@@ -551,32 +493,23 @@
                         });
                     }, 300);
                 } else {
-                    if (html5QrCodeRef.current) {
-                        if (html5QrCodeRef.current.isScanning) {
-                            html5QrCodeRef.current.stop().then(() => {
-                                html5QrCodeRef.current.clear();
-                            }).catch(e => console.log(e));
-                        } else {
-                            try {
-                                html5QrCodeRef.current.clear();
-                            } catch (e) {}
-                        }
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().then(() => {
+                            html5QrCodeRef.current.clear();
+                        }).catch(e => console.log(e));
                     }
                 }
 
                 return () => {
-                    if (html5QrCodeRef.current) {
-                        try {
-                            if (html5QrCodeRef.current.isScanning) {
-                                html5QrCodeRef.current.stop().catch(e => console.log(e));
-                            }
-                            html5QrCodeRef.current.clear();
-                        } catch (e) {}
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().catch(e => console.log(e));
                     }
                 };
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI ORIGINAL YANG DIKEMBALIKAN SEMPURNA
+            // ----------------------------------------------------------------------
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (ORIGINAL SEMPURNA)
+            // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -897,35 +830,12 @@
                     }
                 }
 
-                await handleBackupToFirebaseSilently();
-
                 setLastCompletedTx(newTx);
                 setCart([]);
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
                 refreshData();
-            };
-
-            const handleBackupToFirebaseSilently = async () => {
-                try {
-                    const allProducts = await db.products.toArray();
-                    const allCategories = await db.categories.toArray();
-                    const allTransactions = await db.transactions.toArray();
-                    const storeSetting = await db.settings.get('store_info');
-
-                    const backupData = {
-                        products: allProducts,
-                        categories: allCategories,
-                        transactions: allTransactions,
-                        settings: storeSetting || {},
-                        updatedAt: new Date().toISOString()
-                    };
-
-                    await firebaseDb.ref('pos_backup').set(backupData);
-                } catch (error) {
-                    console.error("Silent Sync Error:", error);
-                }
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -983,16 +893,14 @@
                     lastSoldDate: productForm.lastSoldDate || '-'
                 });
 
-                await handleBackupToFirebaseSilently();
                 setIsProductModalOpen(false);
                 refreshData();
-                alert("Produk dengan multi satuan & konversi berhasil disimpan dan disinkronkan!");
+                alert("Produk dengan multi satuan & konversi berhasil disimpan!");
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
                     await db.products.delete(id);
-                    await handleBackupToFirebaseSilently();
                     refreshData();
                 }
             };
@@ -1099,7 +1007,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold">● Real-time Synced</span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold">● Firebase Connected</span>
                                 </div>
                             </div>
 
@@ -1129,12 +1037,12 @@
                                 className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
                                 <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
-                                {isBackingUp ? 'Memproses Sync...' : 'Sinkronkan Data'}
+                                {isBackingUp ? 'Memproses Backup...' : 'Backup ke Firebase'}
                             </button>
 
                             {lastBackupTime && (
                                 <p className="text-[10px] text-slate-400 text-center font-semibold">
-                                    Sync Terakhir:<br/>{lastBackupTime}
+                                    Backup Terakhir:<br/>{lastBackupTime}
                                 </p>
                             )}
 
@@ -1162,7 +1070,7 @@
                                         disabled={isBackingUp}
                                         className="md:hidden px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
                                     >
-                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Sync
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Backup
                                     </button>
                                 </div>
 
@@ -1652,10 +1560,10 @@
                                 
                                 <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
                                     <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Real-Time Sync (fpos-8da84)
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
                                     </h3>
                                     <p className="text-xs text-slate-300">
-                                        Sinkronkan seluruh data stok dan transaksi secara real-time antar perangkat.
+                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
                                     </p>
                                     <button 
                                         onClick={handleBackupToFirebase}
@@ -1663,7 +1571,7 @@
                                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                        {isBackingUp ? 'Memproses Sync...' : 'Sinkronkan Sekarang'}
+                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
                                     </button>
                                 </div>
 
@@ -1684,7 +1592,7 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); await handleBackupToFirebaseSilently(); alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
