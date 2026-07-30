@@ -432,6 +432,7 @@
             useEffect(() => {
                 initSampleData().then(() => {
                     refreshData();
+                    setupRealtimeSync();
                 });
             }, []);
 
@@ -444,6 +445,31 @@
                 setCategories(c);
                 setTransactions(t);
                 if (s) setStoreInfo(s);
+            };
+
+            // AUTO SYNC REAL-TIME LISTENER DARI FIREBASE KE SEMUA DEVICE
+            const setupRealtimeSync = () => {
+                firebaseDb.ref('pos_backup').on('value', async (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        if (data.products && Array.isArray(data.products)) {
+                            await db.products.clear();
+                            await db.products.bulkPut(data.products);
+                        }
+                        if (data.categories && Array.isArray(data.categories)) {
+                            await db.categories.clear();
+                            await db.categories.bulkPut(data.categories);
+                        }
+                        if (data.transactions && Array.isArray(data.transactions)) {
+                            await db.transactions.clear();
+                            await db.transactions.bulkPut(data.transactions);
+                        }
+                        if (data.settings) {
+                            await db.settings.put({ ...data.settings, id: 'store_info' });
+                        }
+                        refreshData();
+                    }
+                });
             };
 
             const handleBackupToFirebase = async () => {
@@ -468,10 +494,10 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84)[cite: 1].");
+                    alert("✅ Berhasil! Seluruh data transaksi & produk telah disinkronkan ke Firebase Cloud (fpos-8da84)[cite: 1].");
                 } catch (error) {
                     console.error("Backup Error:", error);
-                    alert("❌ Gagal backup ke Firebase: " + error.message);
+                    alert("❌ Gagal sinkronisasi ke Firebase: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
@@ -701,18 +727,14 @@
                 XLSX.writeFile(workbook, fileName);
             };
 
-            // Fungsi Memicu Pemilihan Satuan / Multi Satuan saat klik produk di POS / Scan Barcode / AI Visual
             const triggerAddToCartWithUnitSelection = (product) => {
-                // Pastikan produk memiliki units, jika tidak buat default Pcs
                 const units = product.units && product.units.length > 0 ? product.units : [
                     { name: 'Pcs', isi: 1, costPrice: product.costPrice || 0, sellingPrice: product.sellingPrice || 0 }
                 ];
 
                 if (units.length === 1) {
-                    // Jika hanya ada 1 satuan, langsung masukkan keranjang
                     addToCart(product, units[0]);
                 } else {
-                    // Jika ada multi satuan, buka modal pilih satuan terlebih dahulu sesuai instruksi
                     setSelectedProductForUnit({ product, units });
                     setIsUnitSelectModalOpen(true);
                 }
@@ -725,7 +747,6 @@
                 const unitCostPrice = Number(selectedUnit.costPrice) || product.costPrice || 0;
 
                 setCart(prev => {
-                    // Unique identifier di cart berdasarkan product.id dan unitName
                     const existingIndex = prev.findIndex(item => item.product.id === product.id && item.unit.name === unitName);
                     if (existingIndex > -1) {
                         return prev.map((item, idx) =>
@@ -784,7 +805,6 @@
                 setIsAddingNewCategory(false);
             };
 
-            // Manajemen Multi Satuan di Form Produk (Tambah/Hapus Baris Satuan)
             const handleAddUnitRow = () => {
                 setProductForm(prev => ({
                     ...prev,
@@ -843,7 +863,6 @@
 
                 await db.transactions.add(newTx);
 
-                // Kurangi stok database berdasarkan konversi (qty * isi satuan)
                 for (const item of cart) {
                     const prod = await db.products.get(item.product.id);
                     if (prod) {
@@ -856,12 +875,36 @@
                     }
                 }
 
+                // Otomatis sinkronkan perubahan transaksi & stok ke Firebase Cloud agar device lain langsung update
+                await handleBackupToFirebaseSilently();
+
                 setLastCompletedTx(newTx);
                 setCart([]);
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
                 refreshData();
+            };
+
+            const handleBackupToFirebaseSilently = async () => {
+                try {
+                    const allProducts = await db.products.toArray();
+                    const allCategories = await db.categories.toArray();
+                    const allTransactions = await db.transactions.toArray();
+                    const storeSetting = await db.settings.get('store_info');
+
+                    const backupData = {
+                        products: allProducts,
+                        categories: allCategories,
+                        transactions: allTransactions,
+                        settings: storeSetting || {},
+                        updatedAt: new Date().toISOString()
+                    };
+
+                    await firebaseDb.ref('pos_backup').set(backupData);
+                } catch (error) {
+                    console.error("Silent Sync Error:", error);
+                }
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -907,7 +950,6 @@
                     return;
                 }
 
-                // Ambil harga dasar dari satuan pertama sebagai acuan utama kolom produk standar
                 const primaryUnit = productForm.units[0];
 
                 await db.products.put({
@@ -920,14 +962,16 @@
                     lastSoldDate: productForm.lastSoldDate || '-'
                 });
 
+                await handleBackupToFirebaseSilently();
                 setIsProductModalOpen(false);
                 refreshData();
-                alert("Produk dengan multi satuan & konversi berhasil disimpan!");
+                alert("Produk dengan multi satuan & konversi berhasil disimpan dan disinkronkan!");
             };
 
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
                     await db.products.delete(id);
+                    await handleBackupToFirebaseSilently();
                     refreshData();
                 }
             };
@@ -1036,7 +1080,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-bold text-white text-base leading-none">VeloPOS Pro</h1>
-                                    <span className="text-[10px] text-emerald-400 font-semibold">● Firebase Connected</span>
+                                    <span className="text-[10px] text-emerald-400 font-semibold">● Real-time Synced</span>
                                 </div>
                             </div>
 
@@ -1067,12 +1111,12 @@
                                 className="w-full py-2.5 px-3 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow"
                             >
                                 <i data-lucide="cloud-upload" className="w-4 h-4"></i> 
-                                {isBackingUp ? 'Memproses Backup...' : 'Backup ke Firebase'}
+                                {isBackingUp ? 'Memproses Sync...' : 'Sinkronkan Data'}
                             </button>
 
                             {lastBackupTime && (
                                 <p className="text-[10px] text-slate-400 text-center font-semibold">
-                                    Backup Terakhir:<br/>{lastBackupTime}
+                                    Sync Terakhir:<br/>{lastBackupTime}
                                 </p>
                             )}
 
@@ -1102,7 +1146,7 @@
                                         disabled={isBackingUp}
                                         className="md:hidden px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
                                     >
-                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Backup
+                                        <i data-lucide="cloud-upload" className="w-4 h-4"></i> Sync
                                     </button>
                                 </div>
 
@@ -1352,7 +1396,7 @@
                                             {cart.length === 0 ? (
                                                 <p className="text-center py-8 text-xs text-slate-400 font-semibold">Keranjang masih kosong</p>
                                             ) : (
-                                                cart.map(({ product, qty, unit }, index) => (
+                                                cart.map(({ product, qty, unit }) => (
                                                     <div key={product.id + '-' + unit.name} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
                                                         <div className="flex-1 min-w-0 pr-1">
                                                             <p className="text-xs font-bold text-white truncate">{product.name}</p>
@@ -1596,10 +1640,10 @@
                                 
                                 <div className="bg-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-3 max-w-lg shadow-lg">
                                     <h3 className="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Backup (fpos-8da84)
+                                        <i data-lucide="cloud" className="w-4 h-4"></i> Cloud Real-Time Sync (fpos-8da84)
                                     </h3>
                                     <p className="text-xs text-slate-300">
-                                        Amankan seluruh data IndexedDB Anda ke server Firebase Realtime Database.
+                                        Sinkronkan seluruh data stok dan transaksi secara real-time antar perangkat.
                                     </p>
                                     <button 
                                         onClick={handleBackupToFirebase}
@@ -1607,7 +1651,7 @@
                                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
                                     >
                                         <i data-lucide="cloud-upload" className="w-4 h-4"></i>
-                                        {isBackingUp ? 'Proses Backup...' : 'Cadangkan Data ke Firebase'}
+                                        {isBackingUp ? 'Memproses Sync...' : 'Sinkronkan Sekarang'}
                                     </button>
                                 </div>
 
@@ -1628,7 +1672,7 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); await handleBackupToFirebaseSilently(); alert("Pengaturan Toko Berhasil Disimpan & Disinkronkan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
@@ -1656,7 +1700,7 @@
 
                     </main>
 
-                    {/* MODAL PILIH SATUAN & KONVERSI SAAT TRANSAKSI POS (MANUAL, BARCODE, ATAU AI VISUAL) */}
+                    {/* MODAL PILIH SATUAN & KONVERSI SAAT TRANSAKSI POS */}
                     {isUnitSelectModalOpen && selectedProductForUnit && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
@@ -1776,7 +1820,6 @@
                                         )}
                                     </div>
 
-                                    {/* PENGATURAN CUSTOM MULTI SATUAN & KONVERSI */}
                                     <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
                                         <div className="flex justify-between items-center">
                                             <label className="text-indigo-300 font-black">Pengaturan Multi Satuan & Konversi Harga</label>
