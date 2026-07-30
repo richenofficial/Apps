@@ -431,8 +431,9 @@
 
             useEffect(() => {
                 initSampleData().then(() => {
-                    refreshData();
-                    setupRealtimeSync();
+                    fetchAndApplyCloudData().then(() => {
+                        setupRealtimeSync();
+                    });
                 });
             }, []);
 
@@ -445,6 +446,35 @@
                 setCategories(c);
                 setTransactions(t);
                 if (s) setStoreInfo(s);
+            };
+
+            // TARIK DATA DARI FIREBASE CLOUD SAAT PERTAMA KALI DIBUKA
+            const fetchAndApplyCloudData = async () => {
+                try {
+                    const snapshot = await firebaseDb.ref('pos_backup').once('value');
+                    const data = snapshot.val();
+                    if (data) {
+                        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+                            await db.products.clear();
+                            await db.products.bulkPut(data.products);
+                        }
+                        if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+                            await db.categories.clear();
+                            await db.categories.bulkPut(data.categories);
+                        }
+                        if (data.transactions && Array.isArray(data.transactions)) {
+                            await db.transactions.clear();
+                            await db.transactions.bulkPut(data.transactions);
+                        }
+                        if (data.settings) {
+                            await db.settings.put({ ...data.settings, id: 'store_info' });
+                        }
+                    }
+                    await refreshData();
+                } catch (error) {
+                    console.error("Gagal menarik data cloud:", error);
+                    await refreshData();
+                }
             };
 
             // AUTO SYNC REAL-TIME LISTENER DARI FIREBASE KE SEMUA DEVICE
@@ -875,7 +905,6 @@
                     }
                 }
 
-                // Otomatis sinkronkan perubahan transaksi & stok ke Firebase Cloud agar device lain langsung update
                 await handleBackupToFirebaseSilently();
 
                 setLastCompletedTx(newTx);
