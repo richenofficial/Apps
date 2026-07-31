@@ -182,6 +182,7 @@
             );
         }
 
+        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,6 +200,9 @@
             }
         }
 
+        // ----------------------------------------------------------------------
+        // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
+        // ----------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyCk2xwtT9BGIEm520yJqfkSTDED1mOmt4M",
             authDomain: "fpos-8da84.firebaseapp.com",
@@ -215,9 +219,12 @@
         }
         const firebaseDb = firebase.database();
 
+        // ----------------------------------------------------------------------
+        // DATABASE LOKAL INDEXEDDB (Dexie.js)
+        // ----------------------------------------------------------------------
         const db = new Dexie("VeloPOSProDB");
-        db.version(4).stores({
-            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl, units',
+        db.version(3).stores({
+            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
             categories: '++id, name',
             transactions: '++id, transactionNo, total, totalCost, profit, paymentMethod, cashierName, customerName, createdAt',
             settings: 'id, storeName, address, phone, receiptFooter'
@@ -245,98 +252,11 @@
                 ]);
 
                 await db.products.bulkAdd([
-                    { 
-                        id: '1', 
-                        name: 'Indomie Goreng Spesial 85g', 
-                        barcode: '089686010018', 
-                        sku: 'IND-01', 
-                        category: 'Makanan', 
-                        costPrice: 2800, 
-                        sellingPrice: 3500, 
-                        stock: 40, 
-                        minStock: 10, 
-                        expiredDate: expSoon, 
-                        totalSold: 142, 
-                        lastSoldDate: '2026-07-22', 
-                        imageUrl: '',
-                        units: [
-                            { name: 'Pcs', isi: 1, costPrice: 2800, sellingPrice: 3500 },
-                            { name: 'Dus', isi: 40, costPrice: 110000, sellingPrice: 135000 }
-                        ]
-                    },
-                    { 
-                        id: '2', 
-                        name: 'Aqua Air Mineral 600ml', 
-                        barcode: '888600810105', 
-                        sku: 'AQU-02', 
-                        category: 'Minuman', 
-                        costPrice: 2500, 
-                        sellingPrice: 4000, 
-                        stock: 85, 
-                        minStock: 15, 
-                        expiredDate: expFar, 
-                        totalSold: 210, 
-                        lastSoldDate: '2026-07-22', 
-                        imageUrl: '',
-                        units: [
-                            { name: 'Pcs', isi: 1, costPrice: 2500, sellingPrice: 4000 },
-                            { name: 'Karton', isi: 24, costPrice: 58000, sellingPrice: 92000 }
-                        ]
-                    },
-                    { 
-                        id: '3', 
-                        name: 'Susu Ultra Milk Cokelat 250ml', 
-                        barcode: '899100110022', 
-                        sku: 'ULT-01', 
-                        category: 'Minuman', 
-                        costPrice: 5500, 
-                        sellingPrice: 7000, 
-                        stock: 8, 
-                        minStock: 10, 
-                        expiredDate: expSoon, 
-                        totalSold: 88, 
-                        lastSoldDate: '2026-07-20', 
-                        imageUrl: '',
-                        units: [
-                            { name: 'Pcs', isi: 1, costPrice: 5500, sellingPrice: 7000 }
-                        ]
-                    },
-                    { 
-                        id: '4', 
-                        name: 'Minyak Goreng Bimoli 1L', 
-                        barcode: '899200110055', 
-                        sku: 'BIM-01', 
-                        category: 'Sembako', 
-                        costPrice: 16000, 
-                        sellingPrice: 19500, 
-                        stock: 25, 
-                        minStock: 5, 
-                        expiredDate: expFar, 
-                        totalSold: 45, 
-                        lastSoldDate: '2026-07-15', 
-                        imageUrl: '',
-                        units: [
-                            { name: 'Liter', isi: 1, costPrice: 16000, sellingPrice: 19500 }
-                        ]
-                    },
-                    { 
-                        id: '5', 
-                        name: 'Sabun Lifebuoy Red 110g', 
-                        barcode: '899300110033', 
-                        sku: 'LIF-01', 
-                        category: 'Kebutuhan', 
-                        costPrice: 3800, 
-                        sellingPrice: 5000, 
-                        stock: 2, 
-                        minStock: 8, 
-                        expiredDate: expFar, 
-                        totalSold: 5, 
-                        lastSoldDate: '2026-05-10', 
-                        imageUrl: '',
-                        units: [
-                            { name: 'Pcs', isi: 1, costPrice: 3800, sellingPrice: 5000 }
-                        ]
-                    }
+                    { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 4, minStock: 10, expiredDate: expSoon, totalSold: 142, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 85, minStock: 15, expiredDate: expFar, totalSold: 210, lastSoldDate: '2026-07-22', imageUrl: '' },
+                    { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 8, minStock: 10, expiredDate: expSoon, totalSold: 88, lastSoldDate: '2026-07-20', imageUrl: '' },
+                    { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 45, lastSoldDate: '2026-07-15', imageUrl: '' },
+                    { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 2, minStock: 8, expiredDate: expFar, totalSold: 5, lastSoldDate: '2026-05-10', imageUrl: '' }
                 ]);
 
                 await db.settings.put({
@@ -349,6 +269,9 @@
             }
         }
 
+        // ----------------------------------------------------------------------
+        // MAIN APP COMPONENT
+        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -356,20 +279,21 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
+            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
+            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
+            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
-            const [isUnitSelectModalOpen, setIsUnitSelectModalOpen] = useState(false);
-            const [selectedProductForUnit, setSelectedProductForUnit] = useState(null);
-
+            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
@@ -380,6 +304,7 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
+            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -388,6 +313,7 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
+            // State Modal Input / Edit Produk
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -403,10 +329,10 @@
                 stock: 0,
                 minStock: 5,
                 expiredDate: '',
-                imageUrl: '',
-                units: [{ name: 'Pcs', isi: 1, costPrice: 0, sellingPrice: 0 }]
+                imageUrl: ''
             });
 
+            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
@@ -450,7 +376,7 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84)[cite: 1].");
+                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84).");
                 } catch (error) {
                     console.error("Backup Error:", error);
                     alert("❌ Gagal backup ke Firebase: " + error.message);
@@ -460,7 +386,7 @@
             };
 
             // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME (ORIGINAL SEMPURNA)
+            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isScannerOpen) {
@@ -478,7 +404,7 @@
                                 playBeepSound();
                                 const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
                                 if (found) {
-                                    triggerAddToCartWithUnitSelection(found);
+                                    addToCart(found);
                                     setIsScannerOpen(false);
                                 } else {
                                     alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
@@ -508,7 +434,7 @@
             }, [isScannerOpen, products]);
 
             // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (ORIGINAL SEMPURNA)
+            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
             // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
@@ -545,10 +471,12 @@
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
+                    // Load TensorFlow MobileNet model
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
+                    // Deteksi foto objek dari tag video kamera live
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
@@ -557,6 +485,7 @@
                         
                         playBeepSound();
 
+                        // Cari produk yang sesuai dengan keyword hasil prediksi AI
                         const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         
                         let matchedProduct = null;
@@ -565,16 +494,17 @@
                             if (matchedProduct) break;
                         }
 
+                        // Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama atau acak
                         if (!matchedProduct && products.length > 0) {
                             matchedProduct = products[0];
                         }
 
                         if (matchedProduct) {
                             setTimeout(() => {
-                                triggerAddToCartWithUnitSelection(matchedProduct);
+                                addToCart(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan memilih satuan produk untuk "${matchedProduct.name}"!`);
+                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
                             }, 600);
                         } else {
                             setIsAiLoading(false);
@@ -592,6 +522,7 @@
                 }
             };
 
+            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -682,51 +613,23 @@
                 XLSX.writeFile(workbook, fileName);
             };
 
-            const triggerAddToCartWithUnitSelection = (product) => {
-                const units = product.units && product.units.length > 0 ? product.units : [
-                    { name: 'Pcs', isi: 1, costPrice: product.costPrice || 0, sellingPrice: product.sellingPrice || 0 }
-                ];
-
-                if (units.length === 1) {
-                    addToCart(product, units[0]);
-                } else {
-                    setSelectedProductForUnit({ product, units });
-                    setIsUnitSelectModalOpen(true);
-                }
-            };
-
-            const addToCart = (product, selectedUnit) => {
-                const unitName = selectedUnit.name;
-                const unitMultiplier = Number(selectedUnit.isi) || 1;
-                const unitSellingPrice = Number(selectedUnit.sellingPrice) || product.sellingPrice;
-                const unitCostPrice = Number(selectedUnit.costPrice) || product.costPrice || 0;
-
+            const addToCart = (product) => {
                 setCart(prev => {
-                    const existingIndex = prev.findIndex(item => item.product.id === product.id && item.unit.name === unitName);
-                    if (existingIndex > -1) {
-                        return prev.map((item, idx) =>
-                            idx === existingIndex ? { ...item, qty: item.qty + 1 } : item
+                    const existing = prev.find(item => item.product.id === product.id);
+                    if (existing) {
+                        return prev.map(item =>
+                            item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item
                         );
                     }
-                    return [...prev, { 
-                        product, 
-                        qty: 1, 
-                        unit: { 
-                            name: unitName, 
-                            isi: unitMultiplier, 
-                            sellingPrice: unitSellingPrice, 
-                            costPrice: unitCostPrice 
-                        } 
-                    }];
+                    return [...prev, { product, qty: 1 }];
                 });
                 setSearchQuery('');
                 setSearchResults([]);
-                setIsUnitSelectModalOpen(false);
             };
 
-            const updateCartQty = (productId, unitName, delta) => {
+            const updateCartQty = (id, delta) => {
                 setCart(prev => prev.map(item => {
-                    if (item.product.id === productId && item.unit.name === unitName) {
+                    if (item.product.id === id) {
                         const newQty = item.qty + delta;
                         return newQty > 0 ? { ...item, qty: newQty } : null;
                     }
@@ -734,8 +637,8 @@
                 }).filter(Boolean));
             };
 
-            const grandTotal = cart.reduce((a, b) => a + (b.unit.sellingPrice * b.qty), 0);
-            const totalCartCost = cart.reduce((a, b) => a + (b.unit.costPrice * b.qty), 0);
+            const grandTotal = cart.reduce((a, b) => a + (b.product.sellingPrice * b.qty), 0);
+            const totalCartCost = cart.reduce((a, b) => a + ((b.product.costPrice || 0) * b.qty), 0);
 
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
@@ -760,30 +663,6 @@
                 setIsAddingNewCategory(false);
             };
 
-            const handleAddUnitRow = () => {
-                setProductForm(prev => ({
-                    ...prev,
-                    units: [...prev.units, { name: '', isi: 1, costPrice: 0, sellingPrice: 0 }]
-                }));
-            };
-
-            const handleRemoveUnitRow = (index) => {
-                if (productForm.units.length <= 1) {
-                    alert("Minimal harus ada 1 satuan utama produk!");
-                    return;
-                }
-                setProductForm(prev => ({
-                    ...prev,
-                    units: prev.units.filter((_, i) => i !== index)
-                }));
-            };
-
-            const handleUnitRowChange = (index, field, value) => {
-                const updatedUnits = [...productForm.units];
-                updatedUnits[index][field] = field === 'name' ? value : (Number(value) || 0);
-                setProductForm(prev => ({ ...prev, units: updatedUnits }));
-            };
-
             const handleCompletePayment = async () => {
                 const paid = parseFloat(cashPaid) || grandTotal;
                 if (paymentMethod === 'CASH' && paid < grandTotal) {
@@ -798,12 +677,10 @@
                     items: cart.map(c => ({
                         id: c.product.id,
                         name: c.product.name,
-                        unitName: c.unit.name,
-                        unitIsi: c.unit.isi,
-                        costPrice: c.unit.costPrice,
-                        price: c.unit.sellingPrice,
+                        costPrice: c.product.costPrice || 0,
+                        price: c.product.sellingPrice,
                         qty: c.qty,
-                        subtotal: c.unit.sellingPrice * c.qty
+                        subtotal: c.product.sellingPrice * c.qty
                     })),
                     total: grandTotal,
                     totalCost: totalCartCost,
@@ -821,10 +698,9 @@
                 for (const item of cart) {
                     const prod = await db.products.get(item.product.id);
                     if (prod) {
-                        const totalUnitsDeduct = item.qty * item.unit.isi;
                         await db.products.update(item.product.id, { 
-                            stock: Math.max(0, prod.stock - totalUnitsDeduct),
-                            totalSold: (prod.totalSold || 0) + totalUnitsDeduct,
+                            stock: Math.max(0, prod.stock - item.qty),
+                            totalSold: (prod.totalSold || 0) + item.qty,
                             lastSoldDate: new Date().toISOString().split('T')[0]
                         });
                     }
@@ -840,12 +716,7 @@
 
             const handleOpenProductModal = (product = null) => {
                 if (product) {
-                    setProductForm({
-                        ...product,
-                        units: product.units && product.units.length > 0 ? product.units : [
-                            { name: 'Pcs', isi: 1, costPrice: product.costPrice || 0, sellingPrice: product.sellingPrice || 0 }
-                        ]
-                    });
+                    setProductForm(product);
                     setImageInputMode(product.imageUrl && product.imageUrl.startsWith('http') ? 'url' : 'file');
                 } else {
                     setProductForm({
@@ -859,10 +730,7 @@
                         stock: 10,
                         minStock: 5,
                         expiredDate: '',
-                        imageUrl: '',
-                        units: [
-                            { name: 'Pcs', isi: 1, costPrice: 0, sellingPrice: 0 }
-                        ]
+                        imageUrl: ''
                     });
                     setImageInputMode('file');
                 }
@@ -876,17 +744,10 @@
                     return;
                 }
 
-                if (!productForm.units || productForm.units.length === 0 || !productForm.units[0].name.trim()) {
-                    alert("Harap atur minimal 1 multi satuan harga dan konversi produk dengan benar!");
-                    return;
-                }
-
-                const primaryUnit = productForm.units[0];
-
                 await db.products.put({
                     ...productForm,
-                    costPrice: primaryUnit.costPrice,
-                    sellingPrice: primaryUnit.sellingPrice,
+                    costPrice: parseFloat(productForm.costPrice) || 0,
+                    sellingPrice: parseFloat(productForm.sellingPrice) || 0,
                     stock: parseInt(productForm.stock) || 0,
                     minStock: parseInt(productForm.minStock) || 0,
                     totalSold: productForm.totalSold || 0,
@@ -895,7 +756,7 @@
 
                 setIsProductModalOpen(false);
                 refreshData();
-                alert("Produk dengan multi satuan & konversi berhasil disimpan!");
+                alert("Produk berhasil disimpan!");
             };
 
             const handleDeleteProduct = async (id) => {
@@ -905,11 +766,13 @@
                 }
             };
 
+            // PERBAIKAN GRAFIK DASHBOARD DINAMIK SESUAI DATA NYATA TRANSAKSI & PRODUK
             useEffect(() => {
                 if (activeTab === 'dashboard' && salesChartRef.current && topProductsChartRef.current) {
                     if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
                     if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
 
+                    // 1. Logika Grafik Penjualan Harian Dinamis (7 Hari Terakhir Berdasarkan Data Transaksi)
                     const last7DaysLabels = [];
                     const last7DaysTotals = [];
                     for (let i = 6; i >= 0; i--) {
@@ -917,9 +780,11 @@
                         d.setDate(d.getDate() - i);
                         const dateString = formatDateLocal(d);
                         
+                        // Format nama hari Indonesia
                         const dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
                         last7DaysLabels.push(dayName);
 
+                        // Hitung total omzet pada tanggal tersebut
                         const dailyTotal = transactions
                             .filter(t => new Date(t.createdAt).toISOString().split('T')[0] === dateString)
                             .reduce((sum, t) => sum + t.total, 0);
@@ -959,6 +824,7 @@
                         }
                     });
 
+                    // 2. Logika Grafik Produk Terlaris Dinamis (Berdasarkan Data Produk totalSold)
                     const sortedTop = [...products].sort((a, b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0, 5);
                     const ctxTop = topProductsChartRef.current.getContext('2d');
                     chartInstanceRef.current.top = new Chart(ctxTop, {
@@ -999,6 +865,7 @@
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
                     
+                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -1030,6 +897,7 @@
                             </nav>
                         </div>
 
+                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -1059,8 +927,10 @@
                         </div>
                     </aside>
 
+                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
                         
+                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1114,6 +984,7 @@
                                     </div>
                                 </div>
 
+                                {/* PANEL NOTIFIKASI BARANG STOK MENIPIS & MENDEKATI EXPIRED */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
                                         <div className="flex justify-between items-center mb-3">
@@ -1212,6 +1083,7 @@
                             </div>
                         )}
 
+                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
                                 
@@ -1263,7 +1135,7 @@
                                             {searchResults.map(prod => (
                                                 <div 
                                                     key={prod.id}
-                                                    onClick={() => triggerAddToCartWithUnitSelection(prod)}
+                                                    onClick={() => addToCart(prod)}
                                                     className="p-3 hover:bg-indigo-600/30 border-b border-slate-800 last:border-none cursor-pointer flex justify-between items-center transition"
                                                 >
                                                     <div className="pr-2 truncate">
@@ -1281,7 +1153,7 @@
                                             {products.map(prod => (
                                                 <div 
                                                     key={prod.id}
-                                                    onClick={() => triggerAddToCartWithUnitSelection(prod)}
+                                                    onClick={() => addToCart(prod)}
                                                     className="bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/70 p-3 rounded-2xl cursor-pointer flex flex-col justify-between transition shadow-md"
                                                 >
                                                     <div>
@@ -1319,19 +1191,18 @@
                                             {cart.length === 0 ? (
                                                 <p className="text-center py-8 text-xs text-slate-400 font-semibold">Keranjang masih kosong</p>
                                             ) : (
-                                                cart.map(({ product, qty, unit }) => (
-                                                    <div key={product.id + '-' + unit.name} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
+                                                cart.map(({ product, qty }) => (
+                                                    <div key={product.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
                                                         <div className="flex-1 min-w-0 pr-1">
                                                             <p className="text-xs font-bold text-white truncate">{product.name}</p>
-                                                            <p className="text-[10px] text-indigo-400 font-bold">Satuan: {unit.name} (Isi: {unit.isi})</p>
                                                             <p className="text-xs text-indigo-300 font-black tabular-nums whitespace-nowrap mt-0.5 max-w-[110px] truncate">
-                                                                Rp {(unit.sellingPrice * qty).toLocaleString('id-ID')}
+                                                                Rp {(product.sellingPrice * qty).toLocaleString('id-ID')}
                                                             </p>
                                                         </div>
                                                         <div className="flex items-center gap-1.5 shrink-0">
-                                                            <button onClick={() => updateCartQty(product.id, unit.name, -1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">-</button>
+                                                            <button onClick={() => updateCartQty(product.id, -1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">-</button>
                                                             <span className="text-xs font-extrabold w-4 text-center text-white">{qty}</span>
-                                                            <button onClick={() => updateCartQty(product.id, unit.name, 1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">+</button>
+                                                            <button onClick={() => updateCartQty(product.id, 1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">+</button>
                                                         </div>
                                                     </div>
                                                 ))
@@ -1358,6 +1229,7 @@
                             </div>
                         )}
 
+                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1378,7 +1250,8 @@
                                                     <th className="p-3">Foto</th>
                                                     <th className="p-3">SKU / Barcode</th>
                                                     <th className="p-3">Nama Produk</th>
-                                                    <th className="p-3">Multi Satuan & Konversi</th>
+                                                    <th className="p-3">Harga Modal (HPP)</th>
+                                                    <th className="p-3">Harga Jual</th>
                                                     <th className="p-3">Stok</th>
                                                     <th className="p-3">Expired</th>
                                                     <th className="p-3 text-center">Aksi</th>
@@ -1398,15 +1271,8 @@
                                                         </td>
                                                         <td className="p-3 font-mono text-slate-300">{p.sku}<br/><span className="text-[10px] text-slate-400">{p.barcode}</span></td>
                                                         <td className="p-3 font-bold text-white">{p.name}</td>
-                                                        <td className="p-3">
-                                                            <div className="space-y-1">
-                                                                {p.units && p.units.map((u, i) => (
-                                                                    <div key={i} className="text-[11px] bg-slate-950 px-2 py-1 rounded border border-slate-800">
-                                                                        <span className="font-bold text-indigo-300">{u.name}</span> (Isi: {u.isi}) - <span className="text-emerald-300">Rp {Number(u.sellingPrice).toLocaleString('id-ID')}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </td>
+                                                        <td className="p-3 text-amber-300 font-extrabold whitespace-nowrap">Rp {p.costPrice ? p.costPrice.toLocaleString('id-ID') : 0}</td>
+                                                        <td className="p-3 font-black text-indigo-300 whitespace-nowrap">Rp {p.sellingPrice.toLocaleString('id-ID')}</td>
                                                         <td className="p-3 font-extrabold">
                                                             <span className={`px-2.5 py-1 rounded-md text-[10px] ${p.stock <= p.minStock ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
                                                                 {p.stock} Pcs
@@ -1432,6 +1298,7 @@
                             </div>
                         )}
 
+                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1554,6 +1421,7 @@
                             </div>
                         )}
 
+                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
@@ -1599,6 +1467,7 @@
                             </div>
                         )}
 
+                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
                             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
                                 <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
@@ -1619,47 +1488,12 @@
 
                     </main>
 
-                    {/* MODAL PILIH SATUAN & KONVERSI SAAT TRANSAKSI POS */}
-                    {isUnitSelectModalOpen && selectedProductForUnit && (
-                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-sm text-center">Pilih Satuan Jual Produk</h3>
-                                <p className="text-xs font-semibold text-indigo-300 text-center bg-indigo-500/10 p-2 rounded-xl border border-indigo-500/20">
-                                    {selectedProductForUnit.product.name}
-                                </p>
-
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                    {selectedProductForUnit.units.map((u, idx) => (
-                                        <div 
-                                            key={idx}
-                                            onClick={() => addToCart(selectedProductForUnit.product, u)}
-                                            className="p-3 bg-slate-950 hover:bg-indigo-600/30 border border-slate-800 hover:border-indigo-500 rounded-xl cursor-pointer flex justify-between items-center transition"
-                                        >
-                                            <div>
-                                                <p className="font-bold text-white text-xs">{u.name} <span className="text-slate-400 text-[10px]">(Isi: {u.isi} Pcs)</span></p>
-                                                <p className="text-[10px] text-emerald-400 font-extrabold mt-0.5">Rp {Number(u.sellingPrice).toLocaleString('id-ID')}</p>
-                                            </div>
-                                            <span className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">Pilih</span>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <button 
-                                    onClick={() => setIsUnitSelectModalOpen(false)} 
-                                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
-                                >
-                                    Batal
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL INPUT / EDIT PRODUK DENGAN MULTI SATUAN & KONVERSI CUSTOM */}
+                    {/* MODAL INPUT / EDIT PRODUK */}
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+                            <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
                                 <h3 className="font-bold text-white text-sm">
-                                    {productForm.id ? 'Edit Data Produk & Multi Satuan' : 'Tambah Produk Baru & Multi Satuan'}
+                                    {productForm.id ? 'Edit Data Produk' : 'Tambah Produk Baru'}
                                 </h3>
                                 
                                 <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
@@ -1739,68 +1573,6 @@
                                         )}
                                     </div>
 
-                                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-indigo-300 font-black">Pengaturan Multi Satuan & Konversi Harga</label>
-                                            <button type="button" onClick={handleAddUnitRow} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-[10px]">
-                                                + Tambah Satuan
-                                            </button>
-                                        </div>
-                                        <p className="text-[10px] text-slate-400">Contoh: Satuan 1 = Pcs (Isi: 1), Satuan 2 = Dus (Isi: 24 / 40 pcs).</p>
-
-                                        <div className="space-y-2 pt-1">
-                                            {productForm.units.map((unit, index) => (
-                                                <div key={index} className="grid grid-cols-12 gap-1.5 items-center bg-slate-900 p-2 rounded-xl border border-slate-800">
-                                                    <div className="col-span-3">
-                                                        <input 
-                                                            type="text" 
-                                                            placeholder="Nama Satuan (cth: Dus)" 
-                                                            value={unit.name} 
-                                                            onChange={e => handleUnitRowChange(index, 'name', e.target.value)} 
-                                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold text-[11px]"
-                                                            required
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-2">
-                                                        <input 
-                                                            type="number" 
-                                                            placeholder="Isi Pcs" 
-                                                            value={unit.isi} 
-                                                            onChange={e => handleUnitRowChange(index, 'isi', e.target.value)} 
-                                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold text-[11px]"
-                                                            min="1"
-                                                            required
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-3">
-                                                        <input 
-                                                            type="number" 
-                                                            placeholder="Modal (Rp)" 
-                                                            value={unit.costPrice} 
-                                                            onChange={e => handleUnitRowChange(index, 'costPrice', e.target.value)} 
-                                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold text-[11px]"
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-3">
-                                                        <input 
-                                                            type="number" 
-                                                            placeholder="Jual (Rp)" 
-                                                            value={unit.sellingPrice} 
-                                                            onChange={e => handleUnitRowChange(index, 'sellingPrice', e.target.value)} 
-                                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold text-[11px]"
-                                                            required
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-1 text-center">
-                                                        <button type="button" onClick={() => handleRemoveUnitRow(index)} className="p-1.5 bg-rose-500/20 text-rose-300 rounded hover:bg-rose-600 hover:text-white">
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <label className="text-slate-300 font-bold">SKU</label>
@@ -1814,7 +1586,18 @@
 
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-slate-300 font-bold">Stok Total (Pcs)</label>
+                                            <label className="text-slate-300 font-bold">Harga Modal / HPP (Rp) *</label>
+                                            <input type="number" required value={productForm.costPrice} onChange={e => setProductForm({...productForm, costPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
+                                        </div>
+                                        <div>
+                                            <label className="text-slate-300 font-bold">Harga Jual (Rp) *</label>
+                                            <input type="number" required value={productForm.sellingPrice} onChange={e => setProductForm({...productForm, sellingPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-slate-300 font-bold">Stok Awal</label>
                                             <input type="number" value={productForm.stock} onChange={e => setProductForm({...productForm, stock: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
                                         </div>
                                         <div>
@@ -1990,7 +1773,6 @@
                                         {lastCompletedTx.items.map((item, i) => (
                                             <div key={i}>
                                                 <p className="font-extrabold break-words leading-tight">{item.name}</p>
-                                                <p className="text-[9.5px] text-gray-700">Satuan: {item.unitName} (Isi: {item.unitIsi})</p>
                                                 <div className="flex justify-between items-center text-[10px] font-bold mt-0.5 pr-1">
                                                     <span className="whitespace-nowrap shrink-0">{item.qty} x {item.price.toLocaleString('id-ID')}</span>
                                                     <span className="font-black whitespace-nowrap ml-1 shrink-0">Rp {item.subtotal.toLocaleString('id-ID')}</span>
