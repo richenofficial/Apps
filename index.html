@@ -766,40 +766,33 @@
                 }
             };
 
-            // PERBAIKAN GRAFIK DASHBOARD DINAMIK SESUAI DATA NYATA TRANSAKSI & PRODUK
             useEffect(() => {
                 if (activeTab === 'dashboard' && salesChartRef.current && topProductsChartRef.current) {
                     if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
                     if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
 
-                    // 1. Logika Grafik Penjualan Harian Dinamis (7 Hari Terakhir Berdasarkan Data Transaksi)
-                    const last7DaysLabels = [];
-                    const last7DaysTotals = [];
-                    for (let i = 6; i >= 0; i--) {
-                        const d = new Date();
-                        d.setDate(d.getDate() - i);
-                        const dateString = formatDateLocal(d);
-                        
-                        // Format nama hari Indonesia
-                        const dayName = d.toLocaleDateString('id-ID', { weekday: 'long' });
-                        last7DaysLabels.push(dayName);
+                    // Mengelompokkan transaksi berdasarkan tanggal (YYYY-MM-DD) untuk grafik penjualan harian real berdasarkan data aktual
+                    const salesByDate = {};
+                    transactions.forEach(t => {
+                        const dateStr = t.createdAt ? t.createdAt.split('T')[0] : '';
+                        if (dateStr) {
+                            salesByDate[dateStr] = (salesByDate[dateStr] || 0) + (t.total || 0);
+                        }
+                    });
 
-                        // Hitung total omzet pada tanggal tersebut
-                        const dailyTotal = transactions
-                            .filter(t => new Date(t.createdAt).toISOString().split('T')[0] === dateString)
-                            .reduce((sum, t) => sum + t.total, 0);
-                        
-                        last7DaysTotals.push(dailyTotal);
-                    }
+                    // Mengambil 7 hari terakhir atau tanggal yang tersedia
+                    const sortedDates = Object.keys(salesByDate).sort();
+                    const chartLabels = sortedDates.length > 0 ? sortedDates : ['Belum Ada Data'];
+                    const chartDataValues = sortedDates.length > 0 ? sortedDates.map(d => salesByDate[d]) : [0];
 
                     const ctxSales = salesChartRef.current.getContext('2d');
                     chartInstanceRef.current.sales = new Chart(ctxSales, {
                         type: 'line',
                         data: {
-                            labels: last7DaysLabels,
+                            labels: chartLabels,
                             datasets: [{
                                 label: 'Penjualan (Rp)',
-                                data: last7DaysTotals,
+                                data: chartDataValues,
                                 borderColor: '#818cf8',
                                 backgroundColor: 'rgba(99, 102, 241, 0.15)',
                                 fill: true,
@@ -812,9 +805,8 @@
                             plugins: { legend: { display: false } },
                             scales: {
                                 y: {
-                                    beginAtZero: true,
                                     ticks: { color: '#94a3b8' },
-                                    grid: { color: 'rgba(51, 65, 85, 0.3)' }
+                                    grid: { color: '#1e293b' }
                                 },
                                 x: {
                                     ticks: { color: '#94a3b8' },
@@ -824,18 +816,17 @@
                         }
                     });
 
-                    // 2. Logika Grafik Produk Terlaris Dinamis (Berdasarkan Data Produk totalSold)
+                    // Grafik Produk Terlaris berdasarkan total terjual aktual dari database
                     const sortedTop = [...products].sort((a, b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0, 5);
                     const ctxTop = topProductsChartRef.current.getContext('2d');
                     chartInstanceRef.current.top = new Chart(ctxTop, {
                         type: 'bar',
                         data: {
-                            labels: sortedTop.map(p => p.name.length > 12 ? p.name.slice(0, 12) + '...' : p.name),
+                            labels: sortedTop.length > 0 ? sortedTop.map(p => p.name.length > 15 ? p.name.slice(0, 15) + '...' : p.name) : ['Belum Ada Produk'],
                             datasets: [{
                                 label: 'Terjual (Pcs)',
-                                data: sortedTop.map(p => p.totalSold || 0),
-                                backgroundColor: '#10b981',
-                                borderRadius: 6
+                                data: sortedTop.length > 0 ? sortedTop.map(p => p.totalSold || 0) : [0],
+                                backgroundColor: '#10b981'
                             }]
                         },
                         options: { 
@@ -844,9 +835,8 @@
                             plugins: { legend: { display: false } },
                             scales: {
                                 y: {
-                                    beginAtZero: true,
-                                    ticks: { color: '#94a3b8', precision: 0 },
-                                    grid: { color: 'rgba(51, 65, 85, 0.3)' }
+                                    ticks: { color: '#94a3b8' },
+                                    grid: { color: '#1e293b' }
                                 },
                                 x: {
                                     ticks: { color: '#94a3b8' },
@@ -856,10 +846,10 @@
                         }
                     });
                 }
-            }, [activeTab, transactions, products]);
+            }, [activeTab, products, transactions]);
 
             useEffect(() => {
-                setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 100);
+                setTimeout(() => { if (window.lucide) window.lucide.createIcons(); });
             });
 
             return (
@@ -971,13 +961,13 @@
 
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
-                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian</h3>
+                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian (Sesuai Data Transaksi)</h3>
                                         <div className="h-56">
                                             <canvas ref={salesChartRef}></canvas>
                                         </div>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
-                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris</h3>
+                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris (Sesuai Data Penjualan)</h3>
                                         <div className="h-56">
                                             <canvas ref={topProductsChartRef}></canvas>
                                         </div>
@@ -1056,10 +1046,10 @@
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <h3 className="text-sm font-bold text-emerald-300 mb-3">🔥 Produk Terlaris (Fast Moving)</h3>
                                         <div className="space-y-2">
-                                            {[...products].sort((a,b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0,3).map(p => (
+                                            {[...products].sort((a,b) => b.totalSold - a.totalSold).slice(0,3).map(p => (
                                                 <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
                                                     <span className="font-bold text-white pr-2 truncate">{p.name}</span>
-                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
+                                                    <span className="text-emerald-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1068,13 +1058,13 @@
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                                         <h3 className="text-sm font-bold text-rose-300 mb-3">💤 Produk Paling Lama Tidak Terjual (Slow Moving)</h3>
                                         <div className="space-y-2">
-                                            {[...products].sort((a,b) => (a.totalSold || 0) - (b.totalSold || 0)).slice(0,3).map(p => (
+                                            {[...products].sort((a,b) => a.totalSold - b.totalSold).slice(0,3).map(p => (
                                                 <div key={p.id} className="flex justify-between items-center p-2.5 bg-slate-950 rounded-xl text-xs">
                                                     <div className="pr-2 truncate">
                                                         <p className="font-bold text-white truncate">{p.name}</p>
-                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate || '-'}</p>
+                                                        <p className="text-[10px] text-slate-400">Terakhir: {p.lastSoldDate}</p>
                                                     </div>
-                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold || 0} Terjual</span>
+                                                    <span className="text-rose-300 font-extrabold shrink-0 whitespace-nowrap">{p.totalSold} Terjual</span>
                                                 </div>
                                             ))}
                                         </div>
