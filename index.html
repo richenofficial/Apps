@@ -223,12 +223,48 @@
         // DATABASE LOKAL INDEXEDDB (Dexie.js)
         // ----------------------------------------------------------------------
         const db = new Dexie("VeloPOSProDB");
-        db.version(3).stores({
+        db.version(10).stores({
             products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
             categories: '++id, name',
             transactions: '++id, transactionNo, total, totalCost, profit, paymentMethod, cashierName, customerName, createdAt',
             settings: 'id, storeName, address, phone, receiptFooter'
         });
+
+        // Jika terjadi bentrok versi IndexedDB (misalnya browser masih menyimpan
+        // skema versi lama/lebih baru dari sesi sebelumnya), fungsi ini akan
+        // menghapus total database lokal supaya bisa dibuat ulang dari nol.
+        function resetLocalDatabase() {
+            try { db.close(); } catch (e) {}
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.deleteDatabase("VeloPOSProDB");
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+                req.onblocked = () => resolve();
+            });
+        }
+
+        // Menangani error pembukaan/penulisan database secara terpusat.
+        // Kalau errornya VersionError, tawarkan reset otomatis + muat ulang halaman.
+        async function handleDbError(error, context) {
+            console.error(`Database Error (${context}):`, error);
+            if (error && error.name === 'VersionError') {
+                const confirmReset = confirm(
+                    "Penyimpanan lokal browser Anda berisi data dari versi aplikasi yang tidak kompatibel (VersionError).\n\n" +
+                    "Klik OK untuk MERESET penyimpanan lokal di perangkat ini (data produk/transaksi lama akan terhapus) lalu memuat ulang aplikasi.\n" +
+                    "Klik Cancel untuk membatalkan."
+                );
+                if (confirmReset) {
+                    try {
+                        await resetLocalDatabase();
+                        window.location.reload();
+                    } catch (resetError) {
+                        alert("❌ Gagal mereset database: " + resetError.message);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
 
         function formatDateLocal(date) {
             const year = date.getFullYear();
@@ -340,6 +376,11 @@
             useEffect(() => {
                 initSampleData().then(() => {
                     refreshData();
+                }).catch(async (error) => {
+                    const handled = await handleDbError(error, 'inisialisasi awal');
+                    if (!handled) {
+                        alert("❌ Gagal membuka database lokal (IndexedDB): " + error.message + "\n\nCoba buka aplikasi ini di tab browser normal (bukan mode Incognito/Private) dan pastikan penyimpanan browser tidak diblokir.");
+                    }
                 });
             }, []);
 
@@ -494,11 +535,6 @@
                             if (matchedProduct) break;
                         }
 
-                        // Jika tidak ada kemiripan bahasa Inggris, ambil produk pertama atau acak
-                        if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
-                        }
-
                         if (matchedProduct) {
                             setTimeout(() => {
                                 addToCart(matchedProduct);
@@ -508,7 +544,7 @@
                             }, 600);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak cocok dengan nama produk di toko Anda.`);
+                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak ada produk yang cocok di database toko Anda. Silakan tambahkan produk secara manual.`);
                         }
                     } else {
                         setIsAiLoading(false);
@@ -530,9 +566,9 @@
                 }
                 const q = searchQuery.toLowerCase();
                 const filtered = products.filter(p => 
-                    p.name.toLowerCase().includes(q) || 
-                    p.barcode.includes(q) || 
-                    p.sku.toLowerCase().includes(q)
+                    (p.name || '').toLowerCase().includes(q) || 
+                    (p.barcode || '').includes(q) || 
+                    (p.sku || '').toLowerCase().includes(q)
                 );
                 setSearchResults(filtered);
             }, [searchQuery, products]);
@@ -575,7 +611,7 @@
             };
 
             const filteredTransactions = transactions.filter(t => {
-                const txDate = new Date(t.createdAt).toISOString().split('T')[0];
+                const txDate = formatDateLocal(new Date(t.createdAt));
                 if (startDate && txDate < startDate) return false;
                 if (endDate && txDate > endDate) return false;
                 return true;
@@ -614,9 +650,17 @@
             };
 
             const addToCart = (product) => {
+                if (product.stock <= 0) {
+                    alert(`Stok "${product.name}" habis, tidak bisa ditambahkan ke keranjang!`);
+                    return;
+                }
                 setCart(prev => {
                     const existing = prev.find(item => item.product.id === product.id);
                     if (existing) {
+                        if (existing.qty + 1 > product.stock) {
+                            alert(`Stok "${product.name}" tidak mencukupi! Sisa stok: ${product.stock}`);
+                            return prev;
+                        }
                         return prev.map(item =>
                             item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item
                         );
@@ -631,6 +675,10 @@
                 setCart(prev => prev.map(item => {
                     if (item.product.id === id) {
                         const newQty = item.qty + delta;
+                        if (delta > 0 && newQty > item.product.stock) {
+                            alert(`Stok "${item.product.name}" tidak mencukupi! Sisa stok: ${item.product.stock}`);
+                            return item;
+                        }
                         return newQty > 0 ? { ...item, qty: newQty } : null;
                     }
                     return item;
@@ -652,19 +700,38 @@
             };
 
             const handleAddCategory = async () => {
-                if (!newCategoryInput.trim()) return;
-                const exists = categories.find(c => c.name.toLowerCase() === newCategoryInput.trim().toLowerCase());
-                if (!exists) {
-                    await db.categories.add({ name: newCategoryInput.trim() });
-                    await refreshData();
-                    setProductForm(prev => ({ ...prev, category: newCategoryInput.trim() }));
+                const trimmedName = newCategoryInput.trim();
+                if (!trimmedName) {
+                    alert("Nama kategori tidak boleh kosong!");
+                    return;
                 }
-                setNewCategoryInput('');
-                setIsAddingNewCategory(false);
+                const exists = categories.find(c => c.name.toLowerCase() === trimmedName.toLowerCase());
+                if (exists) {
+                    alert(`Kategori "${trimmedName}" sudah ada!`);
+                    setProductForm(prev => ({ ...prev, category: exists.name }));
+                    setNewCategoryInput('');
+                    setIsAddingNewCategory(false);
+                    return;
+                }
+                try {
+                    await db.categories.add({ name: trimmedName });
+                    await refreshData();
+                    setProductForm(prev => ({ ...prev, category: trimmedName }));
+                    setNewCategoryInput('');
+                    setIsAddingNewCategory(false);
+                } catch (error) {
+                    const handled = await handleDbError(error, 'tambah kategori');
+                    if (!handled) {
+                        alert("❌ Gagal menambahkan kategori: " + error.message);
+                    }
+                }
             };
 
             const handleCompletePayment = async () => {
-                const paid = parseFloat(cashPaid) || grandTotal;
+                const parsedCash = parseFloat(cashPaid);
+                const paid = paymentMethod === 'CASH'
+                    ? (isNaN(parsedCash) ? grandTotal : parsedCash)
+                    : grandTotal;
                 if (paymentMethod === 'CASH' && paid < grandTotal) {
                     alert("Jumlah pembayaran kurang!");
                     return;
@@ -711,6 +778,7 @@
                 setIsPaymentModalOpen(false);
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
+                setCustomerInput('');
                 refreshData();
             };
 
@@ -739,24 +807,39 @@
 
             const handleSaveProduct = async (e) => {
                 e.preventDefault();
-                if (!productForm.name.trim()) {
+                if (!productForm.name || !productForm.name.trim()) {
                     alert("Nama produk wajib diisi!");
                     return;
                 }
+                if (productForm.costPrice === '' || productForm.costPrice === null || isNaN(parseFloat(productForm.costPrice))) {
+                    alert("Harga Modal (HPP) wajib diisi dengan angka!");
+                    return;
+                }
+                if (productForm.sellingPrice === '' || productForm.sellingPrice === null || isNaN(parseFloat(productForm.sellingPrice))) {
+                    alert("Harga Jual wajib diisi dengan angka!");
+                    return;
+                }
 
-                await db.products.put({
-                    ...productForm,
-                    costPrice: parseFloat(productForm.costPrice) || 0,
-                    sellingPrice: parseFloat(productForm.sellingPrice) || 0,
-                    stock: parseInt(productForm.stock) || 0,
-                    minStock: parseInt(productForm.minStock) || 0,
-                    totalSold: productForm.totalSold || 0,
-                    lastSoldDate: productForm.lastSoldDate || '-'
-                });
+                try {
+                    await db.products.put({
+                        ...productForm,
+                        costPrice: parseFloat(productForm.costPrice) || 0,
+                        sellingPrice: parseFloat(productForm.sellingPrice) || 0,
+                        stock: parseInt(productForm.stock) || 0,
+                        minStock: parseInt(productForm.minStock) || 0,
+                        totalSold: productForm.totalSold || 0,
+                        lastSoldDate: productForm.lastSoldDate || '-'
+                    });
 
-                setIsProductModalOpen(false);
-                refreshData();
-                alert("Produk berhasil disimpan!");
+                    setIsProductModalOpen(false);
+                    await refreshData();
+                    alert("Produk berhasil disimpan!");
+                } catch (error) {
+                    const handled = await handleDbError(error, 'simpan produk');
+                    if (!handled) {
+                        alert("❌ Gagal menyimpan produk: " + error.message);
+                    }
+                }
             };
 
             const handleDeleteProduct = async (id) => {
@@ -771,85 +854,56 @@
                     if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
                     if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
 
-                    // Mengelompokkan transaksi berdasarkan tanggal (YYYY-MM-DD) untuk grafik penjualan harian real berdasarkan data aktual
-                    const salesByDate = {};
-                    transactions.forEach(t => {
-                        const dateStr = t.createdAt ? t.createdAt.split('T')[0] : '';
-                        if (dateStr) {
-                            salesByDate[dateStr] = (salesByDate[dateStr] || 0) + (t.total || 0);
-                        }
-                    });
-
-                    // Mengambil 7 hari terakhir atau tanggal yang tersedia
-                    const sortedDates = Object.keys(salesByDate).sort();
-                    const chartLabels = sortedDates.length > 0 ? sortedDates : ['Belum Ada Data'];
-                    const chartDataValues = sortedDates.length > 0 ? sortedDates.map(d => salesByDate[d]) : [0];
+                    // Hitung total penjualan riil 7 hari terakhir dari data transaksi (bukan data statis/dummy)
+                    const dayLabels = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                    const last7 = [];
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        last7.push({ dateStr: formatDateLocal(d), label: dayLabels[d.getDay()] });
+                    }
+                    const salesByDay = last7.map(({ dateStr }) =>
+                        transactions
+                            .filter(t => formatDateLocal(new Date(t.createdAt)) === dateStr)
+                            .reduce((acc, t) => acc + t.total, 0)
+                    );
 
                     const ctxSales = salesChartRef.current.getContext('2d');
                     chartInstanceRef.current.sales = new Chart(ctxSales, {
                         type: 'line',
                         data: {
-                            labels: chartLabels,
+                            labels: last7.map(x => x.label),
                             datasets: [{
                                 label: 'Penjualan (Rp)',
-                                data: chartDataValues,
+                                data: salesByDay,
                                 borderColor: '#818cf8',
                                 backgroundColor: 'rgba(99, 102, 241, 0.15)',
                                 fill: true,
                                 tension: 0.4
                             }]
                         },
-                        options: { 
-                            responsive: true, 
-                            maintainAspectRatio: false, 
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                y: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#1e293b' }
-                                },
-                                x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { display: false }
-                                }
-                            }
-                        }
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                     });
 
-                    // Grafik Produk Terlaris berdasarkan total terjual aktual dari database
-                    const sortedTop = [...products].sort((a, b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0, 5);
+                    const sortedTop = [...products].sort((a, b) => b.totalSold - a.totalSold).slice(0, 5);
                     const ctxTop = topProductsChartRef.current.getContext('2d');
                     chartInstanceRef.current.top = new Chart(ctxTop, {
                         type: 'bar',
                         data: {
-                            labels: sortedTop.length > 0 ? sortedTop.map(p => p.name.length > 15 ? p.name.slice(0, 15) + '...' : p.name) : ['Belum Ada Produk'],
+                            labels: sortedTop.map(p => p.name.length > 12 ? p.name.slice(0, 12) + '...' : p.name),
                             datasets: [{
                                 label: 'Terjual (Pcs)',
-                                data: sortedTop.length > 0 ? sortedTop.map(p => p.totalSold || 0) : [0],
+                                data: sortedTop.map(p => p.totalSold),
                                 backgroundColor: '#10b981'
                             }]
                         },
-                        options: { 
-                            responsive: true, 
-                            maintainAspectRatio: false, 
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                y: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: '#1e293b' }
-                                },
-                                x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { display: false }
-                                }
-                            }
-                        }
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                     });
                 }
             }, [activeTab, products, transactions]);
 
             useEffect(() => {
-                setTimeout(() => { if (window.lucide) window.lucide.createIcons(); });
+                setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 100);
             });
 
             return (
@@ -961,13 +1015,13 @@
 
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
-                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian (Sesuai Data Transaksi)</h3>
+                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Penjualan Harian</h3>
                                         <div className="h-56">
                                             <canvas ref={salesChartRef}></canvas>
                                         </div>
                                     </div>
                                     <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl h-72">
-                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris (Sesuai Data Penjualan)</h3>
+                                        <h3 className="text-sm font-bold text-white mb-3">Grafik Produk Terlaris</h3>
                                         <div className="h-56">
                                             <canvas ref={topProductsChartRef}></canvas>
                                         </div>
@@ -1144,7 +1198,7 @@
                                                 <div 
                                                     key={prod.id}
                                                     onClick={() => addToCart(prod)}
-                                                    className="bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/70 p-3 rounded-2xl cursor-pointer flex flex-col justify-between transition shadow-md"
+                                                    className={`bg-slate-900/90 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between transition shadow-md ${prod.stock <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-900 hover:border-indigo-500/70 cursor-pointer'}`}
                                                 >
                                                     <div>
                                                         <div className="h-20 bg-slate-950 rounded-xl mb-2 flex items-center justify-center text-slate-500 overflow-hidden border border-slate-800">
@@ -1157,7 +1211,7 @@
                                                         <p className="font-bold text-xs text-white line-clamp-2">{prod.name}</p>
                                                     </div>
                                                     <div className="mt-2 flex justify-between items-center gap-1">
-                                                        <span className="text-[10px] text-slate-400 font-semibold">Stok: {prod.stock}</span>
+                                                        <span className={`text-[10px] font-semibold ${prod.stock <= 0 ? 'text-rose-400' : 'text-slate-400'}`}>{prod.stock <= 0 ? 'Stok Habis' : `Stok: ${prod.stock}`}</span>
                                                         <span className="font-black text-indigo-300 text-xs shrink-0 whitespace-nowrap">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
                                                     </div>
                                                 </div>
@@ -1724,7 +1778,7 @@
                                         <div className="flex justify-between items-center text-slate-300 font-semibold gap-2">
                                             <span>Kembalian:</span>
                                             <span className="font-black text-emerald-300 text-xs sm:text-sm tabular-nums whitespace-nowrap shrink-0">
-                                                Rp {Math.max(0, (parseFloat(cashPaid) || grandTotal) - grandTotal).toLocaleString('id-ID')}
+                                                Rp {Math.max(0, (isNaN(parseFloat(cashPaid)) ? grandTotal : parseFloat(cashPaid)) - grandTotal).toLocaleString('id-ID')}
                                             </span>
                                         </div>
                                     )}
@@ -1769,7 +1823,7 @@
                                                 </div>
                                             </div>
                                         ))}
-                                    </div> bagian
+                                    </div>
 
                                     <div className="pt-1 text-[11px] space-y-0.5">
                                         <p className="tracking-tighter">------------------------------</p>
@@ -1778,7 +1832,7 @@
                                             <span className="whitespace-nowrap shrink-0 font-black">Rp {lastCompletedTx.total.toLocaleString('id-ID')}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-[10px] font-bold pr-1">
-                                            <span className="shrink-0">Bayar ({lastCompletedTierCheckPaymentMethod = lastCompletedTx.paymentMethod})</span>
+                                            <span className="shrink-0">Bayar ({lastCompletedTx.paymentMethod})</span>
                                             <span className="whitespace-nowrap shrink-0">Rp {lastCompletedTx.paid.toLocaleString('id-ID')}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-[10px] font-bold pr-1">
@@ -1788,7 +1842,7 @@
                                     </div>
 
                                     <div className="text-center pt-2 text-[9.5px] font-semibold">
-                                       <p className="whitespace-pre-line">{storeInfo.receiptFooter}</p>
+                                        <p className="whitespace-pre-line">{storeInfo.receiptFooter}</p>
                                     </div>
                                 </div>
 
