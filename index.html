@@ -182,7 +182,6 @@
             );
         }
 
-        // Suara indikator beep saat berhasil scan
         function playBeepSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -200,9 +199,6 @@
             }
         }
 
-        // ----------------------------------------------------------------------
-        // KONFIGURASI FIREBASE TERHUBUNG (fpos-8da84)
-        // ----------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyCk2xwtT9BGIEm520yJqfkSTDED1mOmt4M",
             authDomain: "fpos-8da84.firebaseapp.com",
@@ -219,9 +215,6 @@
         }
         const firebaseDb = firebase.database();
 
-        // ----------------------------------------------------------------------
-        // DATABASE LOKAL INDEXEDDB (Dexie.js)
-        // ----------------------------------------------------------------------
         const db = new Dexie("VeloPOSProDB");
         db.version(10).stores({
             products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
@@ -230,9 +223,6 @@
             settings: 'id, storeName, address, phone, receiptFooter'
         });
 
-        // Jika terjadi bentrok versi IndexedDB (misalnya browser masih menyimpan
-        // skema versi lama/lebih baru dari sesi sebelumnya), fungsi ini akan
-        // menghapus total database lokal supaya bisa dibuat ulang dari nol.
         function resetLocalDatabase() {
             try { db.close(); } catch (e) {}
             return new Promise((resolve, reject) => {
@@ -243,8 +233,6 @@
             });
         }
 
-        // Menangani error pembukaan/penulisan database secara terpusat.
-        // Kalau errornya VersionError, tawarkan reset otomatis + muat ulang halaman.
         async function handleDbError(error, context) {
             console.error(`Database Error (${context}):`, error);
             if (error && error.name === 'VersionError') {
@@ -305,9 +293,6 @@
             }
         }
 
-        // ----------------------------------------------------------------------
-        // MAIN APP COMPONENT
-        // ----------------------------------------------------------------------
         function App() {
             const [activeTab, setActiveTab] = useState('pos');
             const [products, setProducts] = useState([]);
@@ -315,21 +300,17 @@
             const [transactions, setTransactions] = useState([]);
             const [storeInfo, setStoreInfo] = useState({});
             
-            // State Backup Firebase
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
-            // State Filter Tanggal Laporan
             const [datePreset, setDatePreset] = useState('ALL');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
 
-            // State POS
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
             
-            // State Kamera & Scanner
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
             const [isAiLoading, setIsAiLoading] = useState(false);
@@ -340,7 +321,6 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
-            // State Modal Pembayaran & Struk
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -349,7 +329,6 @@
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-            // State Modal Input / Edit Produk
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
             const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -368,14 +347,40 @@
                 imageUrl: ''
             });
 
-            // Ref untuk Chart
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
             useEffect(() => {
-                initSampleData().then(() => {
-                    refreshData();
+                initSampleData().then(async () => {
+                    await refreshData();
+                    
+                    // Sinkronisasi Real-time otomatis dari Firebase ke IndexedDB agar antar device sinkron
+                    firebaseDb.ref('pos_backup').on('value', async (snapshot) => {
+                        const remoteData = snapshot.val();
+                        if (remoteData) {
+                            try {
+                                if (remoteData.products && Array.isArray(remoteData.products)) {
+                                    await db.products.clear();
+                                    await db.products.bulkPut(remoteData.products);
+                                }
+                                if (remoteData.categories && Array.isArray(remoteData.categories)) {
+                                    await db.categories.clear();
+                                    await db.categories.bulkPut(remoteData.categories);
+                                }
+                                if (remoteData.transactions && Array.isArray(remoteData.transactions)) {
+                                    await db.transactions.clear();
+                                    await db.transactions.bulkPut(remoteData.transactions);
+                                }
+                                if (remoteData.settings) {
+                                    await db.settings.put({ ...remoteData.settings, id: 'store_info' });
+                                }
+                                await refreshData();
+                            } catch (err) {
+                                console.error("Sync error:", err);
+                            }
+                        }
+                    });
                 }).catch(async (error) => {
                     const handled = await handleDbError(error, 'inisialisasi awal');
                     if (!handled) {
@@ -417,18 +422,15 @@
                     setLastBackupTime(nowStr);
                     localStorage.setItem('last_backup_time', nowStr);
 
-                    alert("✅ Berhasil! Seluruh data transaksi & produk telah di-backup ke Firebase Cloud (fpos-8da84).");
+                    alert("✅ Berhasil! Seluruh data transaksi & produk telah disinkronkan ke Firebase Cloud (fpos-8da84).");
                 } catch (error) {
                     console.error("Backup Error:", error);
-                    alert("❌ Gagal backup ke Firebase: " + error.message);
+                    alert("❌ Gagal sinkronisasi ke Firebase: " + error.message);
                 } finally {
                     setIsBackingUp(false);
                 }
             };
 
-            // ----------------------------------------------------------------------
-            // 1. LOGIKA SCANNER BARCODE KAMERA REAL-TIME
-            // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isScannerOpen) {
                     setTimeout(() => {
@@ -474,9 +476,6 @@
                 };
             }, [isScannerOpen, products]);
 
-            // ----------------------------------------------------------------------
-            // 2. LOGIKA VISUAL SCAN AI FOTO PRODUK REAL (TensorFlow.js)
-            // ----------------------------------------------------------------------
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -512,12 +511,10 @@
                 setAiDetectedName("Menganalisis gambar dengan AI...");
 
                 try {
-                    // Load TensorFlow MobileNet model
                     if (!aiModelRef.current) {
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    // Deteksi foto objek dari tag video kamera live
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
@@ -526,7 +523,6 @@
                         
                         playBeepSound();
 
-                        // Cari produk yang sesuai dengan keyword hasil prediksi AI
                         const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
                         
                         let matchedProduct = null;
@@ -558,7 +554,6 @@
                 }
             };
 
-            // Smart Auto-complete Instant Engine
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
@@ -719,6 +714,7 @@
                     setProductForm(prev => ({ ...prev, category: trimmedName }));
                     setNewCategoryInput('');
                     setIsAddingNewCategory(false);
+                    handleBackupToFirebase();
                 } catch (error) {
                     const handled = await handleDbError(error, 'tambah kategori');
                     if (!handled) {
@@ -779,7 +775,8 @@
                 setIsReceiptModalOpen(true);
                 setCashPaid('');
                 setCustomerInput('');
-                refreshData();
+                await refreshData();
+                handleBackupToFirebase();
             };
 
             const handleOpenProductModal = (product = null) => {
@@ -833,6 +830,7 @@
 
                     setIsProductModalOpen(false);
                     await refreshData();
+                    handleBackupToFirebase();
                     alert("Produk berhasil disimpan!");
                 } catch (error) {
                     const handled = await handleDbError(error, 'simpan produk');
@@ -845,7 +843,8 @@
             const handleDeleteProduct = async (id) => {
                 if (confirm("Apakah Anda yakin ingin menghapus produk ini?")) {
                     await db.products.delete(id);
-                    refreshData();
+                    await refreshData();
+                    handleBackupToFirebase();
                 }
             };
 
@@ -854,7 +853,6 @@
                     if (chartInstanceRef.current.sales) chartInstanceRef.current.sales.destroy();
                     if (chartInstanceRef.current.top) chartInstanceRef.current.top.destroy();
 
-                    // Hitung total penjualan riil 7 hari terakhir dari data transaksi (bukan data statis/dummy)
                     const dayLabels = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
                     const last7 = [];
                     for (let i = 6; i >= 0; i--) {
@@ -909,7 +907,6 @@
             return (
                 <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-950 text-white">
                     
-                    {/* DESKTOP SIDEBAR NAVIGATION */}
                     <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-slate-800/80 p-4 justify-between">
                         <div>
                             <div className="flex items-center gap-3 px-2 py-3 mb-6">
@@ -941,7 +938,6 @@
                             </nav>
                         </div>
 
-                        {/* TOMBOL BACKUP FIREBASE DI SIDEBAR */}
                         <div className="space-y-3">
                             <button 
                                 onClick={handleBackupToFirebase}
@@ -971,10 +967,8 @@
                         </div>
                     </aside>
 
-                    {/* MAIN CONTENT AREA */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
                         
-                        {/* 1. DASHBOARD MENU */}
                         {activeTab === 'dashboard' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-6 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1028,7 +1022,6 @@
                                     </div>
                                 </div>
 
-                                {/* PANEL NOTIFIKASI BARANG STOK MENIPIS & MENDEKATI EXPIRED */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-lg">
                                         <div className="flex justify-between items-center mb-3">
@@ -1127,7 +1120,6 @@
                             </div>
                         )}
 
-                        {/* 2. POS / TRANSAKSI MENU */}
                         {activeTab === 'pos' && (
                             <div className="flex flex-col lg:flex-row h-full overflow-hidden pb-16 md:pb-0">
                                 
@@ -1160,7 +1152,6 @@
                                         </button>
                                     </div>
 
-                                    {/* PANEL MODAL KAMERA SCANNER BARCODE */}
                                     {isScannerOpen && (
                                         <div className="mb-4 bg-slate-900 p-3 rounded-2xl border border-indigo-500/50 shadow-2xl relative">
                                             <div className="flex justify-between items-center mb-2">
@@ -1273,7 +1264,6 @@
                             </div>
                         )}
 
-                        {/* 3. MENU PRODUK & STOK */}
                         {activeTab === 'products' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex justify-between items-center">
@@ -1342,7 +1332,6 @@
                             </div>
                         )}
 
-                        {/* 4. MENU LAPORAN */}
                         {activeTab === 'reports' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1465,7 +1454,6 @@
                             </div>
                         )}
 
-                        {/* 5. MENU SETTING */}
                         {activeTab === 'settings' && (
                             <div className="p-4 md:p-6 overflow-y-auto space-y-4 pb-24 md:pb-6">
                                 <h2 className="text-2xl font-black text-white">Pengaturan Toko & Printer</h2>
@@ -1504,14 +1492,13 @@
                                         <label className="text-xs font-bold text-slate-300">Pesan Footer Struk</label>
                                         <textarea value={storeInfo.receiptFooter || ''} onChange={e => setStoreInfo({...storeInfo, receiptFooter: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold mt-1 h-20"/>
                                     </div>
-                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
+                                    <button onClick={async () => { await db.settings.put({...storeInfo, id: 'store_info'}); alert("Pengaturan Toko Berhasil Disimpan!"); handleBackupToFirebase(); }} className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20">
                                         Simpan Pengaturan
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* MOBILE BOTTOM NAVIGATION */}
                         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-2 z-50">
                             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] ${activeTab === 'dashboard' ? 'text-indigo-400 font-bold' : 'text-slate-400'}`}>
                                 <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
@@ -1532,7 +1519,6 @@
 
                     </main>
 
-                    {/* MODAL INPUT / EDIT PRODUK */}
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1664,7 +1650,6 @@
                         </div>
                     )}
 
-                    {/* MODAL SCAN VISUAL FOTO PRODUK REAL (TENSORFLOW AI) */}
                     {isVisualScanOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
@@ -1712,7 +1697,6 @@
                         </div>
                     )}
 
-                    {/* MODAL PEMBAYARAN */}
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
@@ -1792,7 +1776,6 @@
                         </div>
                     )}
 
-                    {/* MODAL CETAK STRUK */}
                     {isReceiptModalOpen && lastCompletedTx && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
