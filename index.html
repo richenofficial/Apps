@@ -355,7 +355,6 @@
                 initSampleData().then(async () => {
                     await refreshData();
                     
-                    // Sinkronisasi Real-time otomatis dari Firebase ke IndexedDB agar antar device sinkron
                     firebaseDb.ref('pos_backup').on('value', async (snapshot) => {
                         const remoteData = snapshot.val();
                         if (remoteData) {
