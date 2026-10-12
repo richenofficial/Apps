@@ -59,14 +59,18 @@
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         
         .receipt-font {
-            font-family: 'Courier New', Courier, monospace;
-            font-weight: 700 !important;
+            font-family: 'Lucida Console', Monaco, 'Courier New', Courier, monospace !important;
+            font-weight: 900 !important;
+            color: #000000 !important;
+            -webkit-font-smoothing: antialiased !important;
+            -moz-osx-font-smoothing: grayscale !important;
+            text-rendering: optimizeLegibility !important;
         }
 
-        /* PERBAIKAN STRUK PRINTER THERMAL */
+        /* CETAK STRUK THERMAL SUPAYA SANGAT KONTRAS, TAJAM, TANPA PECAH/BURAM & BEBAS HEADER/FOOTER BROWSER */
         @media print {
             @page {
-                margin: 0;
+                margin: 0mm;
                 size: auto;
             }
             html, body {
@@ -75,7 +79,7 @@
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100% !important;
-                font-weight: bold !important;
+                font-weight: 900 !important;
             }
             body * { 
                 visibility: hidden !important; 
@@ -88,17 +92,19 @@
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
-                width: 92% !important;
-                max-width: 92% !important;
-                margin-left: 2px !important;
-                margin-right: auto !important;
-                padding: 6px 12px 6px 4px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 4px 8px !important;
                 box-sizing: border-box !important;
                 background: white !important;
-                font-family: 'Courier New', Courier, monospace !important;
-                font-size: 10.5px !important;
+                border: none !important;
+                box-shadow: none !important;
+                font-family: 'Lucida Console', Monaco, 'Courier New', Courier, monospace !important;
+                font-size: 11.5px !important;
                 line-height: 1.25 !important;
-                font-weight: 800 !important;
+                font-weight: 900 !important;
+                -webkit-font-smoothing: none !important;
             }
         }
     </style>
@@ -216,8 +222,8 @@
         const firebaseDb = firebase.database();
 
         const db = new Dexie("VeloPOSProDB");
-        db.version(10).stores({
-            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl',
+        db.version(11).stores({
+            products: 'id, name, barcode, sku, category, costPrice, sellingPrice, stock, minStock, expiredDate, totalSold, lastSoldDate, imageUrl, units',
             categories: '++id, name',
             transactions: '++id, transactionNo, total, totalCost, profit, paymentMethod, cashierName, customerName, createdAt',
             settings: 'id, storeName, address, phone, receiptFooter'
@@ -274,12 +280,17 @@
                     { name: 'Kebutuhan' }
                 ]);
 
+                const defaultUnits = [
+                    { name: 'Pcs', isi: 1, costPrice: 2800, sellingPrice: 3500 },
+                    { name: 'Renceng', isi: 10, costPrice: 27500, sellingPrice: 34000 }
+                ];
+
                 await db.products.bulkAdd([
-                    { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 50, minStock: 10, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '' },
-                    { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 50, minStock: 15, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '' },
-                    { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 50, minStock: 10, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '' },
-                    { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '' },
-                    { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 30, minStock: 8, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '' }
+                    { id: '1', name: 'Indomie Goreng Spesial 85g', barcode: '089686010018', sku: 'IND-01', category: 'Makanan', costPrice: 2800, sellingPrice: 3500, stock: 50, minStock: 10, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '', units: defaultUnits },
+                    { id: '2', name: 'Aqua Air Mineral 600ml', barcode: '888600810105', sku: 'AQU-02', category: 'Minuman', costPrice: 2500, sellingPrice: 4000, stock: 50, minStock: 15, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '', units: [{ name: 'Pcs', isi: 1, costPrice: 2500, sellingPrice: 4000 }, { name: 'Dus', isi: 24, costPrice: 58000, sellingPrice: 92000 }] },
+                    { id: '3', name: 'Susu Ultra Milk Cokelat 250ml', barcode: '899100110022', sku: 'ULT-01', category: 'Minuman', costPrice: 5500, sellingPrice: 7000, stock: 50, minStock: 10, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '', units: [{ name: 'Pcs', isi: 1, costPrice: 5500, sellingPrice: 7000 }] },
+                    { id: '4', name: 'Minyak Goreng Bimoli 1L', barcode: '899200110055', sku: 'BIM-01', category: 'Sembako', costPrice: 16000, sellingPrice: 19500, stock: 25, minStock: 5, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '', units: [{ name: 'Pcs', isi: 1, costPrice: 16000, sellingPrice: 19500 }] },
+                    { id: '5', name: 'Sabun Lifebuoy Red 110g', barcode: '899300110033', sku: 'LIF-01', category: 'Kebutuhan', costPrice: 3800, sellingPrice: 5000, stock: 30, minStock: 8, expiredDate: expFar, totalSold: 0, lastSoldDate: '-', imageUrl: '', units: [{ name: 'Pcs', isi: 1, costPrice: 3800, sellingPrice: 5000 }] }
                 ]);
 
                 await db.settings.put({
@@ -320,6 +331,10 @@
             const html5QrCodeRef = useRef(null);
             const aiModelRef = useRef(null);
 
+            const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+            const [selectedProductForUnit, setSelectedProductForUnit] = useState(null);
+            const [selectedUnitObj, setSelectedUnitObj] = useState(null);
+
             const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState('CASH');
             const [cashPaid, setCashPaid] = useState('');
@@ -327,6 +342,20 @@
             const [customerInput, setCustomerInput] = useState('');
             const [lastCompletedTx, setLastCompletedTx] = useState(null);
             const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+            const [pausedTransactions, setPausedTransactions] = useState([]);
+            const [isPausedListModalOpen, setIsPausedListModalOpen] = useState(false);
+            
+            const [isEditPriceModalOpen, setIsEditPriceModalOpen] = useState(false);
+            const [selectedCartItemForEdit, setSelectedCartItemForEdit] = useState(null);
+            const [customNewPrice, setCustomNewPrice] = useState('');
+
+            const [isEditQtyModalOpen, setIsEditQtyModalOpen] = useState(false);
+            const [customNewQty, setCustomNewQty] = useState('');
+
+            const [isReprintModalOpen, setIsReprintModalOpen] = useState(false);
+            const [reprintSelectedDate, setReprintSelectedDate] = useState('');
+            const [reprintSelectedNoTrx, setReprintSelectedNoTrx] = useState('');
 
             const [isProductModalOpen, setIsProductModalOpen] = useState(false);
             const [imageInputMode, setImageInputMode] = useState('file');
@@ -343,12 +372,31 @@
                 stock: 0,
                 minStock: 5,
                 expiredDate: '',
-                imageUrl: ''
+                imageUrl: '',
+                units: []
             });
 
             const salesChartRef = useRef(null);
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
+
+            // REFS UNTUK MENGHINDARI STALE STATE PADA SHORTCUT KEYBOARD
+            const cartRef = useRef(cart);
+            cartRef.current = cart;
+            const isPaymentModalOpenRef = useRef(isPaymentModalOpen);
+            isPaymentModalOpenRef.current = isPaymentModalOpen;
+            const isUnitModalOpenRef = useRef(isUnitModalOpen);
+            isUnitModalOpenRef.current = isUnitModalOpen;
+            const isReprintModalOpenRef = useRef(isReprintModalOpen);
+            isReprintModalOpenRef.current = isReprintModalOpen;
+            const isPausedListModalOpenRef = useRef(isPausedListModalOpen);
+            isPausedListModalOpenRef.current = isPausedListModalOpen;
+            const isEditPriceModalOpenRef = useRef(isEditPriceModalOpen);
+            isEditPriceModalOpenRef.current = isEditPriceModalOpen;
+            const isEditQtyModalOpenRef = useRef(isEditQtyModalOpen);
+            isEditQtyModalOpenRef.current = isEditQtyModalOpen;
+            const activeTabRef = useRef(activeTab);
+            activeTabRef.current = activeTab;
 
             useEffect(() => {
                 initSampleData().then(async () => {
@@ -385,6 +433,81 @@
                         alert("❌ Gagal membuka database lokal (IndexedDB): " + error.message + "\n\nCoba buka aplikasi ini di tab browser normal (bukan mode Incognito/Private) dan pastikan penyimpanan browser tidak diblokir.");
                     }
                 });
+            }, []);
+
+            // EVENT LISTENER SHORTCUT KEYBOARD YANG DIPERBARUI SESUAI PERMINTAAN
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (activeTabRef.current === 'pos') {
+                        if (e.key === 'F1') {
+                            e.preventDefault();
+                            // F1: Delete / Void item terakhir di keranjang
+                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                                const lastItem = cartRef.current[cartRef.current.length - 1];
+                                handleVoidCartItem(lastItem.cartId);
+                            }
+                        } else if (e.key === 'F2') {
+                            e.preventDefault();
+                            // F2: Batal Transaksi
+                            handleCancelTransaction();
+                        } else if (e.key === 'F3') {
+                            e.preventDefault();
+                            // F3: Ubah Harga item terakhir di keranjang
+                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                                handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]);
+                            }
+                        } else if (e.key === 'F4') {
+                            e.preventDefault();
+                            // F4: Ubah Qty item terakhir di keranjang
+                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                                handleOpenEditQty(cartRef.current[cartRef.current.length - 1]);
+                            }
+                        } else if (e.key === 'F5') {
+                            e.preventDefault();
+                            // F5: Reprint Struk
+                            if (!isReprintModalOpenRef.current) {
+                                setIsReprintModalOpen(true);
+                            }
+                        } else if (e.key === 'F6') {
+                            e.preventDefault();
+                            // F6: Jeda Transaksi (Hold)
+                            if (!isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
+                                handlePauseTransaction();
+                            }
+                        } else if (e.key === 'F7') {
+                            e.preventDefault();
+                            // F7: Jeda List (Lihat Transaksi Jeda)
+                            if (!isPausedListModalOpenRef.current) {
+                                setIsPausedListModalOpen(true);
+                            }
+                        } else if (e.key === 'F8') {
+                            e.preventDefault();
+                            // F8: Cari Item (Fokus ke input pencarian)
+                            const searchInput = document.getElementById('pos-search-input');
+                            if (searchInput) {
+                                searchInput.focus();
+                                searchInput.select();
+                            }
+                        } else if (e.key === 'F9') {
+                            e.preventDefault();
+                            // F9: Bayar Sekarang
+                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
+                                setIsPaymentModalOpen(true);
+                            }
+                        } else if (e.key === 'Delete') {
+                            if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+                                if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
+                                    e.preventDefault();
+                                    const lastItem = cartRef.current[cartRef.current.length - 1];
+                                    handleVoidCartItem(lastItem.cartId);
+                                }
+                            }
+                        }
+                    }
+                };
+
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
             }, []);
 
             const refreshData = async () => {
@@ -445,7 +568,7 @@
                                 playBeepSound();
                                 const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
                                 if (found) {
-                                    addToCart(found);
+                                    triggerUnitSelection(found);
                                     setIsScannerOpen(false);
                                 } else {
                                     alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
@@ -531,10 +654,10 @@
 
                         if (matchedProduct) {
                             setTimeout(() => {
-                                addToCart(matchedProduct);
+                                triggerUnitSelection(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan menambahkan "${matchedProduct.name}" ke keranjang!`);
+                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan membuka pilihan konversi untuk "${matchedProduct.name}"!`);
                             }, 600);
                         } else {
                             setIsAiLoading(false);
@@ -642,34 +765,72 @@
                 XLSX.writeFile(workbook, fileName);
             };
 
-            const addToCart = (product) => {
+            const triggerUnitSelection = (product) => {
                 if (product.stock <= 0) {
                     alert(`Stok "${product.name}" habis, tidak bisa ditambahkan ke keranjang!`);
                     return;
                 }
+                const availableUnits = (product.units && product.units.length > 0) ? product.units : [
+                    { name: 'Pcs', isi: 1, costPrice: product.costPrice || 0, sellingPrice: product.sellingPrice || 0 }
+                ];
+                setSelectedProductForUnit(product);
+                setSelectedUnitObj(availableUnits[0]);
+                setIsUnitModalOpen(true);
+            };
+
+            const confirmAddToCartWithUnit = () => {
+                if (!selectedProductForUnit || !selectedUnitObj) return;
+                const product = selectedProductForUnit;
+                const unit = selectedUnitObj;
+                const multiplier = parseInt(unit.isi) || 1;
+                const actualQtyNeeded = multiplier; 
+
+                if (actualQtyNeeded > product.stock) {
+                    alert(`Stok "${product.name}" tidak mencukupi! Permintaan: ${actualQtyNeeded} Pcs (berdasarkan satuan ${unit.name}), Sisa stok: ${product.stock} Pcs`);
+                    return;
+                }
+
+                const adjustedSellingPrice = parseFloat(unit.sellingPrice) || (product.sellingPrice * multiplier);
+                const adjustedCostPrice = parseFloat(unit.costPrice) || ((product.costPrice || 0) * multiplier);
+                const customCartId = `${product.id}_${unit.name}`;
+
                 setCart(prev => {
-                    const existing = prev.find(item => item.product.id === product.id);
+                    const existing = prev.find(item => item.cartId === customCartId);
                     if (existing) {
-                        if (existing.qty + 1 > product.stock) {
-                            alert(`Stok "${product.name}" tidak mencukupi! Sisa stok: ${product.stock}`);
+                        const newQty = existing.qty + 1;
+                        if ((newQty * multiplier) > product.stock) {
+                            alert(`Stok "${product.name}" tidak mencukupi!`);
                             return prev;
                         }
                         return prev.map(item =>
-                            item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item
+                            item.cartId === customCartId ? { ...item, qty: newQty } : item
                         );
                     }
-                    return [...prev, { product, qty: 1 }];
+                    return [...prev, { 
+                        cartId: customCartId,
+                        product, 
+                        qty: 1, 
+                        unitType: unit.name, 
+                        multiplier: multiplier,
+                        unitSellingPrice: adjustedSellingPrice,
+                        unitCostPrice: adjustedCostPrice
+                    }];
                 });
+
+                setIsUnitModalOpen(false);
+                setSelectedProductForUnit(null);
+                setSelectedUnitObj(null);
                 setSearchQuery('');
                 setSearchResults([]);
             };
 
-            const updateCartQty = (id, delta) => {
+            const updateCartQty = (cartId, delta) => {
                 setCart(prev => prev.map(item => {
-                    if (item.product.id === id) {
+                    if (item.cartId === cartId) {
                         const newQty = item.qty + delta;
-                        if (delta > 0 && newQty > item.product.stock) {
-                            alert(`Stok "${item.product.name}" tidak mencukupi! Sisa stok: ${item.product.stock}`);
+                        const totalUnitsNeeded = newQty * item.multiplier;
+                        if (delta > 0 && totalUnitsNeeded > item.product.stock) {
+                            alert(`Stok "${item.product.name}" tidak mencukupi! Sisa stok: ${item.product.stock} Pcs`);
                             return item;
                         }
                         return newQty > 0 ? { ...item, qty: newQty } : null;
@@ -678,8 +839,123 @@
                 }).filter(Boolean));
             };
 
-            const grandTotal = cart.reduce((a, b) => a + (b.product.sellingPrice * b.qty), 0);
-            const totalCartCost = cart.reduce((a, b) => a + ((b.product.costPrice || 0) * b.qty), 0);
+            // FUNGSI BATALKAN TRANSAKSI [F2]
+            const handleCancelTransaction = () => {
+                if (cartRef.current.length === 0) return;
+                if (confirm("Apakah Anda yakin ingin membatalkan transaksi dan mengosongkan keranjang?")) {
+                    setCart([]);
+                }
+            };
+
+            // FUNGSI HAPUS / VOID ITEM DARI KERANJANG [F1]
+            const handleVoidCartItem = (cartId) => {
+                if (confirm("Hapus item ini dari keranjang (Void)?")) {
+                    setCart(prev => prev.filter(item => item.cartId !== cartId));
+                }
+            };
+
+            // FUNGSI UBAH HARGA ITEM DI KERANJANG [F3]
+            const handleOpenEditPrice = (item) => {
+                setSelectedCartItemForEdit(item);
+                setCustomNewPrice(item.unitSellingPrice.toString());
+                setIsEditPriceModalOpen(true);
+            };
+
+            const handleSaveCustomPrice = () => {
+                const newPrice = parseFloat(customNewPrice);
+                if (isNaN(newPrice) || newPrice < 0) {
+                    alert("Masukkan harga baru yang valid!");
+                    return;
+                }
+                setCart(prev => prev.map(item => 
+                    item.cartId === selectedCartItemForEdit.cartId ? { ...item, unitSellingPrice: newPrice } : item
+                ));
+                setIsEditPriceModalOpen(false);
+                setSelectedCartItemForEdit(null);
+                setCustomNewPrice('');
+            };
+
+            // FUNGSI UBAH QTY ITEM DI KERANJANG [F4]
+            const handleOpenEditQty = (item) => {
+                setSelectedCartItemForEdit(item);
+                setCustomNewQty(item.qty.toString());
+                setIsEditQtyModalOpen(true);
+            };
+
+            const handleSaveCustomQty = () => {
+                const newQty = parseInt(customNewQty);
+                if (isNaN(newQty) || newQty <= 0) {
+                    alert("Masukkan jumlah kuantitas yang valid!");
+                    return;
+                }
+                const totalUnitsNeeded = newQty * selectedCartItemForEdit.multiplier;
+                if (totalUnitsNeeded > selectedCartItemForEdit.product.stock) {
+                    alert(`Stok "${selectedCartItemForEdit.product.name}" tidak mencukupi! Sisa stok: ${selectedCartItemForEdit.product.stock} Pcs`);
+                    return;
+                }
+                setCart(prev => prev.map(item => 
+                    item.cartId === selectedCartItemForEdit.cartId ? { ...item, qty: newQty } : item
+                ));
+                setIsEditQtyModalOpen(false);
+                setSelectedCartItemForEdit(null);
+                setCustomNewQty('');
+            };
+
+            // FUNGSI JEDA TRANSAKSI [F6]
+            const handlePauseTransaction = () => {
+                if (cartRef.current.length === 0) {
+                    alert("Keranjang masih kosong, tidak ada transaksi untuk dijeda!");
+                    return;
+                }
+                const pausedName = prompt("Masukkan nama/catatan untuk transaksi jeda ini:", `Pelanggan ${pausedTransactions.length + 1}`);
+                if (pausedName === null) return;
+
+                const newPausedObj = {
+                    id: 'PAUSE-' + Date.now().toString().slice(-6),
+                    name: pausedName.trim() || `Transaksi ${pausedTransactions.length + 1}`,
+                    items: [...cartRef.current],
+                    createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                };
+
+                setPausedTransactions(prev => [...prev, newPausedObj]);
+                setCart([]);
+                alert("Transaksi berhasil dijeda (Hold)!");
+            };
+
+            // FUNGSI PULIHKAN TRANSAKSI YANG DIJEDA [F7]
+            const handleResumeTransaction = (pausedObj) => {
+                if (cartRef.current.length > 0) {
+                    if (!confirm("Keranjang saat ini memiliki item aktif. Timpa atau gabungkan dengan transaksi jeda? Klik OK untuk mengganti keranjang dengan transaksi jeda.")) {
+                        return;
+                    }
+                }
+                setCart(pausedObj.items);
+                setPausedTransactions(prev => prev.filter(p => p.id !== pausedObj.id));
+                setIsPausedListModalOpen(false);
+                alert(`Transaksi "${pausedObj.name}" berhasil dipulihkan!`);
+            };
+
+            // FUNGSI REPRINT BERDASARKAN PILIHAN DROPDOWN [F5]
+            const handleExecuteReprint = () => {
+                if (!reprintSelectedNoTrx) {
+                    alert("Silakan pilih No Faktur / Transaksi terlebih dahulu!");
+                    return;
+                }
+
+                const foundTx = transactions.find(t => t.transactionNo === reprintSelectedNoTrx);
+                if (foundTx) {
+                    setLastCompletedTx(foundTx);
+                    setIsReprintModalOpen(false);
+                    setReprintSelectedDate('');
+                    setReprintSelectedNoTrx('');
+                    setIsReceiptModalOpen(true);
+                } else {
+                    alert("Transaksi tidak ditemukan di database!");
+                }
+            };
+
+            const grandTotal = cart.reduce((a, b) => a + (b.unitSellingPrice * b.qty), 0);
+            const totalCartCost = cart.reduce((a, b) => a + (b.unitCostPrice * b.qty), 0);
 
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
@@ -738,10 +1014,11 @@
                     items: cart.map(c => ({
                         id: c.product.id,
                         name: c.product.name,
-                        costPrice: c.product.costPrice || 0,
-                        price: c.product.sellingPrice,
+                        costPrice: c.unitCostPrice,
+                        price: c.unitSellingPrice,
                         qty: c.qty,
-                        subtotal: c.product.sellingPrice * c.qty
+                        unitType: c.unitType,
+                        subtotal: c.unitSellingPrice * c.qty
                     })),
                     total: grandTotal,
                     totalCost: totalCartCost,
@@ -759,9 +1036,10 @@
                 for (const item of cart) {
                     const prod = await db.products.get(item.product.id);
                     if (prod) {
+                        const totalDeduction = item.qty * item.multiplier;
                         await db.products.update(item.product.id, { 
-                            stock: Math.max(0, prod.stock - item.qty),
-                            totalSold: (prod.totalSold || 0) + item.qty,
+                            stock: Math.max(0, prod.stock - totalDeduction),
+                            totalSold: (prod.totalSold || 0) + totalDeduction,
                             lastSoldDate: new Date().toISOString().split('T')[0]
                         });
                     }
@@ -779,7 +1057,13 @@
 
             const handleOpenProductModal = (product = null) => {
                 if (product) {
-                    setProductForm(product);
+                    const defaultUnits = (product.units && product.units.length > 0) ? product.units : [
+                        { name: 'Pcs', isi: 1, costPrice: product.costPrice || 0, sellingPrice: product.sellingPrice || 0 }
+                    ];
+                    setProductForm({
+                        ...product,
+                        units: defaultUnits
+                    });
                     setImageInputMode(product.imageUrl && product.imageUrl.startsWith('http') ? 'url' : 'file');
                 } else {
                     setProductForm({
@@ -793,11 +1077,39 @@
                         stock: 10,
                         minStock: 5,
                         expiredDate: '',
-                        imageUrl: ''
+                        imageUrl: '',
+                        units: [
+                            { name: 'Pcs', isi: 1, costPrice: 0, sellingPrice: 0 }
+                        ]
                     });
                     setImageInputMode('file');
                 }
                 setIsProductModalOpen(true);
+            };
+
+            const handleAddUnitRow = () => {
+                setProductForm(prev => ({
+                    ...prev,
+                    units: [...(prev.units || []), { name: '', isi: 2, costPrice: 0, sellingPrice: 0 }]
+                }));
+            };
+
+            const handleRemoveUnitRow = (index) => {
+                setProductForm(prev => ({
+                    ...prev,
+                    units: prev.units.filter((_, i) => i !== index)
+                }));
+            };
+
+            const handleUnitRowChange = (index, field, value) => {
+                setProductForm(prev => {
+                    const updatedUnits = [...prev.units];
+                    updatedUnits[index] = {
+                        ...updatedUnits[index],
+                        [field]: value
+                    };
+                    return { ...prev, units: updatedUnits };
+                });
             };
 
             const handleSaveProduct = async (e) => {
@@ -815,15 +1127,27 @@
                     return;
                 }
 
+                const baseCost = parseFloat(productForm.costPrice) || 0;
+                const baseSell = parseFloat(productForm.sellingPrice) || 0;
+                const processedUnits = (productForm.units && productForm.units.length > 0) ? productForm.units.map(u => ({
+                    name: u.name.trim() || 'Pcs',
+                    isi: parseInt(u.isi) || 1,
+                    costPrice: parseFloat(u.costPrice) || (baseCost * (parseInt(u.isi) || 1)),
+                    sellingPrice: parseFloat(u.sellingPrice) || (baseSell * (parseInt(u.isi) || 1))
+                })) : [
+                    { name: 'Pcs', isi: 1, costPrice: baseCost, sellingPrice: baseSell }
+                ];
+
                 try {
                     await db.products.put({
                         ...productForm,
-                        costPrice: parseFloat(productForm.costPrice) || 0,
-                        sellingPrice: parseFloat(productForm.sellingPrice) || 0,
+                        costPrice: baseCost,
+                        sellingPrice: baseSell,
                         stock: parseInt(productForm.stock) || 0,
                         minStock: parseInt(productForm.minStock) || 0,
                         totalSold: productForm.totalSold || 0,
-                        lastSoldDate: productForm.lastSoldDate || '-'
+                        lastSoldDate: productForm.lastSoldDate || '-',
+                        units: processedUnits
                     });
 
                     setIsProductModalOpen(false);
@@ -919,19 +1243,19 @@
 
                             <nav className="space-y-1.5">
                                 <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                                    <i data-lucide="layout-dashboard" className="w-5 h-5"></i> 🏠 Dashboard
+                                    <i data-lucide="layout-dashboard" className="w-5 h-5"></i> Dashboard
                                 </button>
                                 <button onClick={() => setActiveTab('pos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${activeTab === 'pos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                                    <i data-lucide="shopping-cart" className="w-5 h-5"></i> 🛒 POS Kasir
+                                    <i data-lucide="shopping-cart" className="w-5 h-5"></i> POS Kasir
                                 </button>
                                 <button onClick={() => setActiveTab('products')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${activeTab === 'products' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                                    <i data-lucide="box" className="w-5 h-5"></i> 📦 Menu Produk
+                                    <i data-lucide="box" className="w-5 h-5"></i> Produk
                                 </button>
                                 <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                                    <i data-lucide="file-text" className="w-5 h-5"></i> 📊 Laporan
+                                    <i data-lucide="file-text" className="w-5 h-5"></i> Laporan
                                 </button>
                                 <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                                    <i data-lucide="settings" className="w-5 h-5"></i> ⚙ Setting
+                                    <i data-lucide="settings" className="w-5 h-5"></i> Setting
                                 </button>
                             </nav>
                         </div>
@@ -1123,11 +1447,43 @@
                                 
                                 <div className="flex-1 flex flex-col p-4 overflow-hidden">
                                     
+                                    {/* TOMBOL PINTASAN FITUR POS SESUAI URUTAN BARU (F1 - F9 TERPISAH) */}
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleVoidCartItem(cartRef.current[cartRef.current.length - 1].cartId); }} title="Delete [F1]" className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🗑️ Delete [f1]
+                                        </button>
+                                        <button onClick={handleCancelTransaction} title="Batal [F2]" className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            ❌ Batal [f2]
+                                        </button>
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Harga [F3]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            💰 Ubah Harga [f3]
+                                        </button>
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditQty(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Qty [F4]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            📦 Ubah Qty [f4]
+                                        </button>
+                                        <button onClick={() => setIsReprintModalOpen(true)} title="Reprint [F5]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🖨️ Reprint [f5]
+                                        </button>
+                                        <button onClick={handlePauseTransaction} title="Jeda [F6]" className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            ⏸️ Jeda [f6]
+                                        </button>
+                                        <button onClick={() => setIsPausedListModalOpen(true)} title="Jeda List [F7]" className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            📂 Jeda List ({pausedTransactions.length}) [f7]
+                                        </button>
+                                        <button onClick={() => { const s = document.getElementById('pos-search-input'); if (s) { s.focus(); s.select(); } }} title="Cari Item [F8]" className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🔍 Cari Item [f8]
+                                        </button>
+                                        <button onClick={() => { if (cartRef.current.length > 0) setIsPaymentModalOpen(true); }} title="Bayar [F9]" className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            💵 Bayar [f9]
+                                        </button>
+                                    </div>
+
                                     <div className="relative mb-4 flex gap-2">
                                         <div className="relative flex-1">
                                             <input 
+                                                id="pos-search-input"
                                                 type="text"
-                                                placeholder="Ketik 1 huruf/angka, nama, barcode, atau SKU..."
+                                                placeholder="Ketik nama, barcode, atau SKU [f8]..."
                                                 value={searchQuery}
                                                 onChange={e => setSearchQuery(e.target.value)}
                                                 className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner"
@@ -1144,7 +1500,7 @@
 
                                         <button 
                                             onClick={() => setIsVisualScanOpen(true)}
-                                            className="px-3.5 py-3 bg-indigo-600/30 border border-indigo-500/60 text-indigo-200 rounded-2xl flex items-center gap-1.5 text-xs font-bold hover:bg-indigo-600 hover:text-white transition shadow"
+                                            className="px-3.5 py-3 bg-slate-900 border border-slate-700 text-indigo-300 hover:border-indigo-500 hover:text-white rounded-2xl flex items-center gap-1.5 text-xs font-bold transition shadow"
                                         >
                                             <i data-lucide="camera" className="w-4 h-4"></i> Visual Scan AI
                                         </button>
@@ -1168,7 +1524,7 @@
                                             {searchResults.map(prod => (
                                                 <div 
                                                     key={prod.id}
-                                                    onClick={() => addToCart(prod)}
+                                                    onClick={() => triggerUnitSelection(prod)}
                                                     className="p-3 hover:bg-indigo-600/30 border-b border-slate-800 last:border-none cursor-pointer flex justify-between items-center transition"
                                                 >
                                                     <div className="pr-2 truncate">
@@ -1186,7 +1542,7 @@
                                             {products.map(prod => (
                                                 <div 
                                                     key={prod.id}
-                                                    onClick={() => addToCart(prod)}
+                                                    onClick={() => triggerUnitSelection(prod)}
                                                     className={`bg-slate-900/90 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between transition shadow-md ${prod.stock <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-900 hover:border-indigo-500/70 cursor-pointer'}`}
                                                 >
                                                     <div>
@@ -1209,6 +1565,7 @@
                                     </div>
                                 </div>
 
+                                {/* BAGIAN KERANJANG KASIR */}
                                 <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col justify-between p-4 shadow-2xl">
                                     <div>
                                         <div className="flex justify-between items-center pb-3 border-b border-slate-800">
@@ -1224,18 +1581,24 @@
                                             {cart.length === 0 ? (
                                                 <p className="text-center py-8 text-xs text-slate-400 font-semibold">Keranjang masih kosong</p>
                                             ) : (
-                                                cart.map(({ product, qty }) => (
-                                                    <div key={product.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
+                                                cart.map((item) => (
+                                                    <div key={item.cartId} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center shadow-sm gap-2">
                                                         <div className="flex-1 min-w-0 pr-1">
-                                                            <p className="text-xs font-bold text-white truncate">{product.name}</p>
+                                                            <p className="text-xs font-bold text-white truncate">{item.product.name}</p>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-[10px] text-emerald-400 font-bold">Satuan: {item.unitType}</span>
+                                                                <button onClick={() => handleOpenEditPrice(item)} title="Ubah Harga [f3]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Harga [f3]</button>
+                                                                <button onClick={() => handleOpenEditQty(item)} title="Ubah Qty [f4]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Qty [f4]</button>
+                                                            </div>
                                                             <p className="text-xs text-indigo-300 font-black tabular-nums whitespace-nowrap mt-0.5 max-w-[110px] truncate">
-                                                                Rp {(product.sellingPrice * qty).toLocaleString('id-ID')}
+                                                                Rp {(item.unitSellingPrice * item.qty).toLocaleString('id-ID')}
                                                             </p>
                                                         </div>
                                                         <div className="flex items-center gap-1.5 shrink-0">
-                                                            <button onClick={() => updateCartQty(product.id, -1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">-</button>
-                                                            <span className="text-xs font-extrabold w-4 text-center text-white">{qty}</span>
-                                                            <button onClick={() => updateCartQty(product.id, 1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">+</button>
+                                                            <button onClick={() => updateCartQty(item.cartId, -1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">-</button>
+                                                            <span className="text-xs font-extrabold w-4 text-center text-white">{item.qty}</span>
+                                                            <button onClick={() => updateCartQty(item.cartId, 1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">+</button>
+                                                            <button onClick={() => handleVoidCartItem(item.cartId)} title="Delete [f1]" className="w-6 h-6 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded font-bold text-xs flex items-center justify-center ml-1">×</button>
                                                         </div>
                                                     </div>
                                                 ))
@@ -1255,7 +1618,7 @@
                                             onClick={() => setIsPaymentModalOpen(true)}
                                             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 font-black text-white rounded-xl shadow-lg shadow-indigo-600/30 text-sm transition"
                                         >
-                                            Bayar Sekarang
+                                            Bayar Sekarang [f9]
                                         </button>
                                     </div>
                                 </div>
@@ -1284,6 +1647,7 @@
                                                     <th className="p-3">Nama Produk</th>
                                                     <th className="p-3">Harga Modal (HPP)</th>
                                                     <th className="p-3">Harga Jual</th>
+                                                    <th className="p-3">Konversi Satuan</th>
                                                     <th className="p-3">Stok</th>
                                                     <th className="p-3">Expired</th>
                                                     <th className="p-3 text-center">Aksi</th>
@@ -1305,6 +1669,19 @@
                                                         <td className="p-3 font-bold text-white">{p.name}</td>
                                                         <td className="p-3 text-amber-300 font-extrabold whitespace-nowrap">Rp {p.costPrice ? p.costPrice.toLocaleString('id-ID') : 0}</td>
                                                         <td className="p-3 font-black text-indigo-300 whitespace-nowrap">Rp {p.sellingPrice.toLocaleString('id-ID')}</td>
+                                                        <td className="p-3">
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {p.units && p.units.length > 0 ? (
+                                                                    p.units.map((u, idx) => (
+                                                                        <span key={idx} className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-300">
+                                                                            <b>{u.name}</b> ({u.isi} Pcs) - Jual: Rp {u.sellingPrice.toLocaleString('id-ID')}
+                                                                        </span>
+                                                                    ))
+                                                                ) : (
+                                                                    <span className="text-slate-400 text-[10px]">Pcs (1)</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
                                                         <td className="p-3 font-extrabold">
                                                             <span className={`px-2.5 py-1 rounded-md text-[10px] ${p.stock <= p.minStock ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
                                                                 {p.stock} Pcs
@@ -1517,9 +1894,215 @@
 
                     </main>
 
+                    {/* MODAL EDIT HARGA ITEM DI KERANJANG */}
+                    {isEditPriceModalOpen && selectedCartItemForEdit && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
+                                <h3 className="font-bold text-white text-base">Ubah Harga Jual Item [f3]</h3>
+                                <p className="text-xs text-slate-400">{selectedCartItemForEdit.product.name} ({selectedCartItemForEdit.unitType})</p>
+                                
+                                <div>
+                                    <label className="text-xs text-slate-300 font-bold">Harga Jual Baru (Rp)</label>
+                                    <input 
+                                        type="number"
+                                        value={customNewPrice}
+                                        onChange={e => setCustomNewPrice(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-black text-base mt-1"
+                                    />
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsEditPriceModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
+                                    <button onClick={handleSaveCustomPrice} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL EDIT QTY ITEM DI KERANJANG [F4] */}
+                    {isEditQtyModalOpen && selectedCartItemForEdit && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
+                                <h3 className="font-bold text-white text-base">Ubah Qty Item [f4]</h3>
+                                <p className="text-xs text-slate-400">{selectedCartItemForEdit.product.name} ({selectedCartItemForEdit.unitType})</p>
+                                
+                                <div>
+                                    <label className="text-xs text-slate-300 font-bold">Kuantitas Baru (Qty)</label>
+                                    <input 
+                                        type="number"
+                                        min="1"
+                                        value={customNewQty}
+                                        onChange={e => setCustomNewQty(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-black text-base mt-1"
+                                    />
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsEditQtyModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
+                                    <button onClick={handleSaveCustomQty} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL DAFTAR TRANSAKSI YANG DIJEDA (HOLD) [F7] */}
+                    {isPausedListModalOpen && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-white text-base">Daftar Transaksi Dijeda (Hold) [f7]</h3>
+                                    <button onClick={() => setIsPausedListModalOpen(false)} className="text-xs text-slate-400 hover:text-white">✕</button>
+                                </div>
+
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {pausedTransactions.length === 0 ? (
+                                        <p className="text-xs text-slate-400 text-center py-6 font-semibold">Tidak ada transaksi yang sedang dijeda.</p>
+                                    ) : (
+                                        pausedTransactions.map(p => (
+                                            <div key={p.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center text-xs">
+                                                <div>
+                                                    <p className="font-bold text-white">{p.name}</p>
+                                                    <p className="text-[10px] text-slate-400">Jam: {p.createdAt} | {p.items.length} Jenis Barang</p>
+                                                </div>
+                                                <button onClick={() => handleResumeTransaction(p)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold">
+                                                    Pulihkan
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <button onClick={() => setIsPausedListModalOpen(false)} className="w-full py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Tutup</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL REPRINT STRUK DENGAN PILIHAN DROPDOWN [F5] */}
+                    {isReprintModalOpen && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
+                                <h3 className="font-bold text-white text-base">REPRINT FAKTUR / STRUK [f5]</h3>
+                                <p className="text-xs text-slate-400">Pilih tanggal dan nomor transaksi dari daftar.</p>
+
+                                <div className="space-y-3 text-xs">
+                                    <div>
+                                        <label className="text-slate-300 font-bold block mb-1">Tanggal :</label>
+                                        <select 
+                                            value={reprintSelectedDate}
+                                            onChange={e => {
+                                                setReprintSelectedDate(e.target.value);
+                                                setReprintSelectedNoTrx('');
+                                            }}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold"
+                                        >
+                                            <option value="">-- Pilih Tanggal Struk --</option>
+                                            {Array.from(new Set(transactions.map(t => formatDateLocal(new Date(t.createdAt))))).map((dateStr, idx) => (
+                                                <option key={idx} value={dateStr}>{dateStr}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-slate-300 font-bold block mb-1">No Faktur / Transaksi :</label>
+                                        <select 
+                                            value={reprintSelectedNoTrx}
+                                            onChange={e => setReprintSelectedNoTrx(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold"
+                                        >
+                                            <option value="">-- Pilih No Faktur --</option>
+                                            {transactions
+                                                .filter(t => !reprintSelectedDate || formatDateLocal(new Date(t.createdAt)) === reprintSelectedDate)
+                                                .map((t, idx) => (
+                                                    <option key={idx} value={t.transactionNo}>{t.transactionNo} ({new Date(t.createdAt).toLocaleTimeString('id-ID')})</option>
+                                                ))
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                    <button onClick={() => setIsReprintModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Keluar</button>
+                                    <button onClick={handleExecuteReprint} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Cetak</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL PILIHAN KONVERSI SATUAN DI POS */}
+                    {isUnitModalOpen && selectedProductForUnit && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
+                                <div className="text-center">
+                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-full font-bold border border-indigo-500/30 uppercase">Pilih Satuan Transaksi</span>
+                                    <h3 className="font-bold text-white text-base mt-2">{selectedProductForUnit.name}</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">Stok Tersedia: {selectedProductForUnit.stock} Pcs</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs text-slate-300 font-bold mb-1.5 block">Pilih Satuan:</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(selectedProductForUnit.units && selectedProductForUnit.units.length > 0 ? selectedProductForUnit.units : [
+                                                { name: 'Pcs', isi: 1, costPrice: selectedProductForUnit.costPrice || 0, sellingPrice: selectedProductForUnit.sellingPrice || 0 }
+                                            ]).map((u, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => setSelectedUnitObj(u)}
+                                                    className={`py-2.5 px-3 rounded-xl text-xs font-extrabold border transition flex flex-col items-center ${
+                                                        selectedUnitObj && selectedUnitObj.name === u.name 
+                                                            ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' 
+                                                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    <span>{u.name}</span>
+                                                    <span className="text-[9px] opacity-75 font-normal">({u.isi} Pcs) - Rp {u.sellingPrice.toLocaleString('id-ID')}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {selectedUnitObj && (
+                                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1">
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>Satuan Terpilih:</span>
+                                                <span className="font-bold text-white">{selectedUnitObj.name} ({selectedUnitObj.isi} Pcs)</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>HPP / Modal:</span>
+                                                <span className="font-bold text-amber-300">Rp {selectedUnitObj.costPrice.toLocaleString('id-ID')}</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>Harga Jual:</span>
+                                                <span className="font-black text-indigo-300">Rp {selectedUnitObj.sellingPrice.toLocaleString('id-ID')}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setIsUnitModalOpen(false)} 
+                                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={confirmAddToCartWithUnit} 
+                                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30"
+                                    >
+                                        Masukkan Keranjang
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {isProductModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+                            <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
                                 <h3 className="font-bold text-white text-sm">
                                     {productForm.id ? 'Edit Data Produk' : 'Tambah Produk Baru'}
                                 </h3>
@@ -1614,12 +2197,85 @@
 
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-slate-300 font-bold">Harga Modal / HPP (Rp) *</label>
+                                            <label className="text-slate-300 font-bold">Harga Modal / HPP Satuan Dasar (Rp) *</label>
                                             <input type="number" required value={productForm.costPrice} onChange={e => setProductForm({...productForm, costPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
                                         </div>
                                         <div>
-                                            <label className="text-slate-300 font-bold">Harga Jual (Rp) *</label>
+                                            <label className="text-slate-300 font-bold">Harga Jual Satuan Dasar (Rp) *</label>
                                             <input type="number" required value={productForm.sellingPrice} onChange={e => setProductForm({...productForm, sellingPrice: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                                                <i data-lucide="Layers" className="w-4 h-4 text-indigo-400"></i> Jenis Konversi & Harga Kustom
+                                            </label>
+                                            <button 
+                                                type="button" 
+                                                onClick={handleAddUnitRow}
+                                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg font-bold text-[10px] border border-indigo-500/40 transition"
+                                            >
+                                                + Tambah Satuan
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400">Tentukan nama satuan (misal: Renceng, Dus, Pak), jumlah isi dalam satuan dasar (Pcs), serta HPP dan harga jual masing-masing satuan.</p>
+
+                                        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                                            {(productForm.units || []).map((u, index) => (
+                                                <div key={index} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="Nama Satuan (Cth: Dus)" 
+                                                            value={u.name} 
+                                                            onChange={e => handleUnitRowChange(index, 'name', e.target.value)}
+                                                            className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-white font-semibold text-xs"
+                                                        />
+                                                        <div className="flex items-center gap-1 w-28">
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="Isi" 
+                                                                value={u.isi} 
+                                                                onChange={e => handleUnitRowChange(index, 'isi', e.target.value)}
+                                                                className="w-16 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-white font-bold text-xs text-center"
+                                                            />
+                                                            <span className="text-[10px] text-slate-400">Pcs</span>
+                                                        </div>
+                                                        {productForm.units.length > 1 && (
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => handleRemoveUnitRow(index)}
+                                                                className="p-1.5 bg-rose-500/20 text-rose-300 hover:bg-rose-600 hover:text-white rounded-lg transition"
+                                                            >
+                                                                <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <span className="text-[10px] text-slate-400 block mb-0.5">HPP Satuan Ini (Rp)</span>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="HPP" 
+                                                                value={u.costPrice} 
+                                                                onChange={e => handleUnitRowChange(index, 'costPrice', e.target.value)}
+                                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-amber-300 font-bold text-xs"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[10px] text-slate-400 block mb-0.5">Harga Jual Satuan Ini (Rp)</span>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="Harga Jual" 
+                                                                value={u.sellingPrice} 
+                                                                onChange={e => handleUnitRowChange(index, 'sellingPrice', e.target.value)}
+                                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-indigo-300 font-black text-xs"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
 
@@ -1698,7 +2354,7 @@
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">Pembayaran Kasir</h3>
+                                <h3 className="font-bold text-white text-base">Pembayaran Kasir [f9]</h3>
                                 
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div>
@@ -1779,51 +2435,65 @@
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
                                 <h3 className="font-bold text-white text-sm text-center">Struk Transaksi Minimarket</h3>
                                 
-                                <div id="receipt-print-area" className="bg-white text-black p-3.5 rounded-xl receipt-font text-[11px] space-y-2 border border-slate-300 font-bold">
-                                    <div className="text-center font-extrabold">
-                                        <p className="text-xs sm:text-sm uppercase">{storeInfo.storeName || 'VELO MART MINIMARKET'}</p>
-                                        <p className="font-semibold text-[9.5px]">{storeInfo.address}</p>
-                                        {storeInfo.phone && <p className="font-semibold text-[9.5px]">Telp: {storeInfo.phone}</p>}
-                                        <p className="tracking-tighter">------------------------------</p>
-                                    </div>
-                                    <div className="space-y-0.5 text-[9.5px] font-bold">
-                                        <p>No TRX : {lastCompletedTx.transactionNo}</p>
-                                        <p>Tgl    : {new Date(lastCompletedTx.createdAt).toLocaleString('id-ID')}</p>
-                                        {lastCompletedTx.cashierName && <p>Kasir  : {lastCompletedTx.cashierName}</p>}
-                                        {lastCompletedTx.customerName && <p>Pelang : {lastCompletedTx.customerName}</p>}
-                                        <p className="tracking-tighter">------------------------------</p>
+                                <div id="receipt-print-area" className="bg-white text-black p-4 rounded-2xl receipt-font text-[11.5px] space-y-3 font-black shadow-inner">
+                                    <div className="text-center pb-2 border-b-2 border-dashed border-black">
+                                        <p className="text-sm sm:text-base uppercase tracking-wider font-black">{storeInfo.storeName || 'VELO MART MINIMARKET'}</p>
+                                        <p className="font-black text-[10.5px] text-black mt-0.5">{storeInfo.address}</p>
+                                        {storeInfo.phone && <p className="font-black text-[10.5px] text-black">Telp: {storeInfo.phone}</p>}
                                     </div>
 
-                                    <div className="space-y-1.5 text-[11px]">
+                                    <div className="space-y-0.5 text-[10.5px] pb-2 border-b-2 border-dashed border-black font-black text-black">
+                                        <div className="flex justify-between">
+                                            <span>No. TRX</span>
+                                            <span>{lastCompletedTx.transactionNo}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Waktu</span>
+                                            <span>{new Date(lastCompletedTx.createdAt).toLocaleString('id-ID')}</span>
+                                        </div>
+                                        {lastCompletedTx.cashierName && (
+                                            <div className="flex justify-between">
+                                                <span>Kasir</span>
+                                                <span>{lastCompletedTx.cashierName}</span>
+                                            </div>
+                                        )}
+                                        {lastCompletedTx.customerName && (
+                                            <div className="flex justify-between">
+                                                <span>Pelanggan</span>
+                                                <span>{lastCompletedTx.customerName}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 pb-2 border-b-2 border-dashed border-black text-[11.5px]">
                                         {lastCompletedTx.items.map((item, i) => (
-                                            <div key={i}>
-                                                <p className="font-extrabold break-words leading-tight">{item.name}</p>
-                                                <div className="flex justify-between items-center text-[10px] font-bold mt-0.5 pr-1">
-                                                    <span className="whitespace-nowrap shrink-0">{item.qty} x {item.price.toLocaleString('id-ID')}</span>
-                                                    <span className="font-black whitespace-nowrap ml-1 shrink-0">Rp {item.subtotal.toLocaleString('id-ID')}</span>
+                                            <div key={i} className="space-y-0.5">
+                                                <p className="font-black text-black leading-snug">{item.name}</p>
+                                                <div className="flex justify-between items-center text-[10.5px] text-black font-black pl-1">
+                                                    <span>{item.qty} x {item.price.toLocaleString('id-ID')}</span>
+                                                    <span>Rp {item.subtotal.toLocaleString('id-ID')}</span>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
 
-                                    <div className="pt-1 text-[11px] space-y-0.5">
-                                        <p className="tracking-tighter">------------------------------</p>
-                                        <div className="flex justify-between items-center font-black text-xs pr-1">
-                                            <span className="shrink-0">TOTAL</span>
-                                            <span className="whitespace-nowrap shrink-0 font-black">Rp {lastCompletedTx.total.toLocaleString('id-ID')}</span>
+                                    <div className="space-y-1 pt-1 text-[11.5px] font-black text-black">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span>TOTAL</span>
+                                            <span className="text-sm">Rp {lastCompletedTx.total.toLocaleString('id-ID')}</span>
                                         </div>
-                                        <div className="flex justify-between items-center text-[10px] font-bold pr-1">
-                                            <span className="shrink-0">Bayar ({lastCompletedTx.paymentMethod})</span>
-                                            <span className="whitespace-nowrap shrink-0">Rp {lastCompletedTx.paid.toLocaleString('id-ID')}</span>
+                                        <div className="flex justify-between items-center text-[10.5px] font-black text-black">
+                                            <span>BAYAR ({lastCompletedTx.paymentMethod})</span>
+                                            <span>Rp {lastCompletedTx.paid.toLocaleString('id-ID')}</span>
                                         </div>
-                                        <div className="flex justify-between items-center text-[10px] font-bold pr-1">
-                                            <span className="shrink-0">Kembali</span>
-                                            <span className="whitespace-nowrap shrink-0">Rp {lastCompletedTx.change.toLocaleString('id-ID')}</span>
+                                        <div className="flex justify-between items-center text-[10.5px] font-black text-black">
+                                            <span>KEMBALI</span>
+                                            <span>Rp {lastCompletedTx.change.toLocaleString('id-ID')}</span>
                                         </div>
                                     </div>
 
-                                    <div className="text-center pt-2 text-[9.5px] font-semibold">
-                                        <p className="whitespace-pre-line">{storeInfo.receiptFooter}</p>
+                                    <div className="text-center pt-3 border-t-2 border-dashed border-black text-[10.5px] text-black font-black">
+                                        <p className="whitespace-pre-line leading-relaxed">{storeInfo.receiptFooter}</p>
                                     </div>
                                 </div>
 
