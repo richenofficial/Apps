@@ -115,7 +115,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const DEFAULT_FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%20475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='3' rx='2' ry='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'/%3E%3C/svg%3E";
+        const DEFAULT_FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='3' rx='2' ry='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'/%3E%3C/svg%3E";
 
         function processImageUrl(url) {
             if (!url || typeof url !== 'string') return '';
@@ -320,6 +320,7 @@
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
+            const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1);
             
             const [isScannerOpen, setIsScannerOpen] = useState(false);
             const [isVisualScanOpen, setIsVisualScanOpen] = useState(false);
@@ -380,7 +381,6 @@
             const topProductsChartRef = useRef(null);
             const chartInstanceRef = useRef({});
 
-            // REFS UNTUK MENGHINDARI STALE STATE PADA SHORTCUT KEYBOARD
             const cartRef = useRef(cart);
             cartRef.current = cart;
             const isPaymentModalOpenRef = useRef(isPaymentModalOpen);
@@ -435,80 +435,108 @@
                 });
             }, []);
 
-            // EVENT LISTENER SHORTCUT KEYBOARD YANG DIPERBARUI SESUAI PERMINTAAN
             useEffect(() => {
                 const handleKeyDown = (e) => {
                     if (activeTabRef.current === 'pos') {
-                        if (e.key === 'F1') {
+                        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                        const searchInputElem = document.getElementById('pos-search-input');
+                        const isTypingInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag);
+                        const isSearchFocused = searchInputElem && document.activeElement === searchInputElem;
+
+                        const upperChar = e.key ? e.key.toUpperCase() : '';
+
+                        if (upperChar === 'F') {
                             e.preventDefault();
-                            // F1: Delete / Void item terakhir di keranjang
+                            if (searchInputElem) {
+                                searchInputElem.focus();
+                                searchInputElem.select();
+                            }
+                            return;
+                        }
+
+                        if (isSearchFocused) {
+                            if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setSearchResults(results => {
+                                    if (results.length === 0) return results;
+                                    setSelectedSearchIndex(prev => (prev < results.length - 1 ? prev + 1 : 0));
+                                    return results;
+                                });
+                                return;
+                            } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setSearchResults(results => {
+                                    if (results.length === 0) return results;
+                                    setSelectedSearchIndex(prev => (prev > 0 ? prev - 1 : results.length - 1));
+                                    return results;
+                                });
+                                return;
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const currentResults = products.filter(p => {
+                                    const q = searchQuery.toLowerCase().trim();
+                                    if (!q) return false;
+                                    return (p.name || '').toLowerCase().includes(q) || 
+                                           (p.barcode || '').includes(q) || 
+                                           (p.sku || '').toLowerCase().includes(q);
+                                });
+                                
+                                if (currentResults.length > 0) {
+                                    const targetIndex = (selectedSearchIndex >= 0 && selectedSearchIndex < currentResults.length) ? selectedSearchIndex : 0;
+                                    triggerUnitSelection(currentResults[targetIndex]);
+                                }
+                                return;
+                            }
+                        }
+
+                        if (isTypingInput) return;
+
+                        if (upperChar === 'D') {
+                            e.preventDefault();
                             if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
                                 const lastItem = cartRef.current[cartRef.current.length - 1];
                                 handleVoidCartItem(lastItem.cartId);
                             }
-                        } else if (e.key === 'F2') {
+                        } else if (upperChar === 'X') {
                             e.preventDefault();
-                            // F2: Batal Transaksi
                             handleCancelTransaction();
-                        } else if (e.key === 'F3') {
+                        } else if (upperChar === 'H') {
                             e.preventDefault();
-                            // F3: Ubah Harga item terakhir di keranjang
                             if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
                                 handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]);
                             }
-                        } else if (e.key === 'F4') {
+                        } else if (upperChar === 'Q') {
                             e.preventDefault();
-                            // F4: Ubah Qty item terakhir di keranjang
                             if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
                                 handleOpenEditQty(cartRef.current[cartRef.current.length - 1]);
                             }
-                        } else if (e.key === 'F5') {
+                        } else if (upperChar === 'R') {
                             e.preventDefault();
-                            // F5: Reprint Struk
                             if (!isReprintModalOpenRef.current) {
                                 setIsReprintModalOpen(true);
                             }
-                        } else if (e.key === 'F6') {
+                        } else if (upperChar === 'J') {
                             e.preventDefault();
-                            // F6: Jeda Transaksi (Hold)
                             if (!isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
                                 handlePauseTransaction();
                             }
-                        } else if (e.key === 'F7') {
+                        } else if (upperChar === 'L') {
                             e.preventDefault();
-                            // F7: Jeda List (Lihat Transaksi Jeda)
                             if (!isPausedListModalOpenRef.current) {
                                 setIsPausedListModalOpen(true);
                             }
-                        } else if (e.key === 'F8') {
+                        } else if (upperChar === 'B') {
                             e.preventDefault();
-                            // F8: Cari Item (Fokus ke input pencarian)
-                            const searchInput = document.getElementById('pos-search-input');
-                            if (searchInput) {
-                                searchInput.focus();
-                                searchInput.select();
-                            }
-                        } else if (e.key === 'F9') {
-                            e.preventDefault();
-                            // F9: Bayar Sekarang
                             if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
                                 setIsPaymentModalOpen(true);
-                            }
-                        } else if (e.key === 'Delete') {
-                            if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
-                                if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
-                                    e.preventDefault();
-                                    const lastItem = cartRef.current[cartRef.current.length - 1];
-                                    handleVoidCartItem(lastItem.cartId);
-                                }
                             }
                         }
                     }
                 };
 
-                window.addEventListener('keydown', handleKeyDown);
-                return () => window.removeEventListener('keydown', handleKeyDown);
-            }, []);
+                window.addEventListener('keydown', handleKeyDown, true);
+                return () => window.removeEventListener('keydown', handleKeyDown, true);
+            }, [searchQuery, selectedSearchIndex, products]);
 
             const refreshData = async () => {
                 const p = await db.products.toArray();
@@ -552,51 +580,63 @@
                 }
             };
 
+            // PERBAIKAN STABILITAS SCANNER BARCODE MENGGUNAKAN HTML5-QRCODE
             useEffect(() => {
                 if (isScannerOpen) {
-                    setTimeout(() => {
+                    const timer = setTimeout(() => {
                         const readerElem = document.getElementById("reader");
                         if (!readerElem) return;
 
-                        const html5QrCode = new Html5Qrcode("reader");
-                        html5QrCodeRef.current = html5QrCode;
+                        if (!html5QrCodeRef.current) {
+                            html5QrCodeRef.current = new Html5Qrcode("reader");
+                        }
 
-                        html5QrCode.start(
-                            { facingMode: "environment" },
-                            { fps: 15, qrbox: { width: 250, height: 150 } },
-                            (decodedText) => {
-                                playBeepSound();
-                                const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
-                                if (found) {
-                                    triggerUnitSelection(found);
-                                    setIsScannerOpen(false);
-                                } else {
-                                    alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
-                                    setIsScannerOpen(false);
+                        const qrCodeInstance = html5QrCodeRef.current;
+
+                        const startScanner = async () => {
+                            try {
+                                if (qrCodeInstance.isScanning) {
+                                    await qrCodeInstance.stop();
                                 }
-                            },
-                            () => {}
-                        ).catch(err => {
-                            console.error("Gagal membuka kamera barcode:", err);
-                            alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
-                            setIsScannerOpen(false);
-                        });
+                                await qrCodeInstance.start(
+                                    { facingMode: "environment" },
+                                    { fps: 15, qrbox: { width: 250, height: 150 } },
+                                    (decodedText) => {
+                                        playBeepSound();
+                                        const found = products.find(p => p.barcode === decodedText || p.sku === decodedText);
+                                        if (found) {
+                                            triggerUnitSelection(found);
+                                            setIsScannerOpen(false);
+                                        } else {
+                                            alert(`Barcode "${decodedText}" terdeteksi, namun produk tidak ditemukan di database!`);
+                                            setIsScannerOpen(false);
+                                        }
+                                    },
+                                    () => {}
+                                );
+                            } catch (err) {
+                                console.error("Gagal membuka kamera barcode:", err);
+                                alert("Kamera tidak dapat diakses atau tidak diizinkan oleh browser!");
+                                setIsScannerOpen(false);
+                            }
+                        };
+
+                        startScanner();
                     }, 300);
+
+                    return () => clearTimeout(timer);
                 } else {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().then(() => {
-                            html5QrCodeRef.current.clear();
-                        }).catch(e => console.log(e));
+                    if (html5QrCodeRef.current) {
+                        if (html5QrCodeRef.current.isScanning) {
+                            html5QrCodeRef.current.stop().then(() => {
+                                html5QrCodeRef.current.clear();
+                            }).catch(e => console.log(e));
+                        }
                     }
                 }
-
-                return () => {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().catch(e => console.log(e));
-                    }
-                };
             }, [isScannerOpen, products]);
 
+            // PERBAIKAN STABILITAS VISUAL SCAN AI MENGGUNAKAN TENSORFLOW & MOBILENET
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -678,6 +718,7 @@
             useEffect(() => {
                 if (!searchQuery.trim()) {
                     setSearchResults([]);
+                    setSelectedSearchIndex(-1);
                     return;
                 }
                 const q = searchQuery.toLowerCase();
@@ -687,6 +728,7 @@
                     (p.sku || '').toLowerCase().includes(q)
                 );
                 setSearchResults(filtered);
+                setSelectedSearchIndex(filtered.length > 0 ? 0 : -1);
             }, [searchQuery, products]);
 
             const lowStockProducts = products.filter(p => p.stock <= p.minStock);
@@ -822,6 +864,7 @@
                 setSelectedUnitObj(null);
                 setSearchQuery('');
                 setSearchResults([]);
+                setSelectedSearchIndex(-1);
             };
 
             const updateCartQty = (cartId, delta) => {
@@ -839,7 +882,6 @@
                 }).filter(Boolean));
             };
 
-            // FUNGSI BATALKAN TRANSAKSI [F2]
             const handleCancelTransaction = () => {
                 if (cartRef.current.length === 0) return;
                 if (confirm("Apakah Anda yakin ingin membatalkan transaksi dan mengosongkan keranjang?")) {
@@ -847,14 +889,12 @@
                 }
             };
 
-            // FUNGSI HAPUS / VOID ITEM DARI KERANJANG [F1]
             const handleVoidCartItem = (cartId) => {
                 if (confirm("Hapus item ini dari keranjang (Void)?")) {
                     setCart(prev => prev.filter(item => item.cartId !== cartId));
                 }
             };
 
-            // FUNGSI UBAH HARGA ITEM DI KERANJANG [F3]
             const handleOpenEditPrice = (item) => {
                 setSelectedCartItemForEdit(item);
                 setCustomNewPrice(item.unitSellingPrice.toString());
@@ -875,7 +915,6 @@
                 setCustomNewPrice('');
             };
 
-            // FUNGSI UBAH QTY ITEM DI KERANJANG [F4]
             const handleOpenEditQty = (item) => {
                 setSelectedCartItemForEdit(item);
                 setCustomNewQty(item.qty.toString());
@@ -901,7 +940,6 @@
                 setCustomNewQty('');
             };
 
-            // FUNGSI JEDA TRANSAKSI [F6]
             const handlePauseTransaction = () => {
                 if (cartRef.current.length === 0) {
                     alert("Keranjang masih kosong, tidak ada transaksi untuk dijeda!");
@@ -922,7 +960,6 @@
                 alert("Transaksi berhasil dijeda (Hold)!");
             };
 
-            // FUNGSI PULIHKAN TRANSAKSI YANG DIJEDA [F7]
             const handleResumeTransaction = (pausedObj) => {
                 if (cartRef.current.length > 0) {
                     if (!confirm("Keranjang saat ini memiliki item aktif. Timpa atau gabungkan dengan transaksi jeda? Klik OK untuk mengganti keranjang dengan transaksi jeda.")) {
@@ -935,7 +972,6 @@
                 alert(`Transaksi "${pausedObj.name}" berhasil dipulihkan!`);
             };
 
-            // FUNGSI REPRINT BERDASARKAN PILIHAN DROPDOWN [F5]
             const handleExecuteReprint = () => {
                 if (!reprintSelectedNoTrx) {
                     alert("Silakan pilih No Faktur / Transaksi terlebih dahulu!");
@@ -1447,34 +1483,33 @@
                                 
                                 <div className="flex-1 flex flex-col p-4 overflow-hidden">
                                     
-                                    {/* TOMBOL PINTASAN FITUR POS SESUAI URUTAN BARU (F1 - F9 TERPISAH) */}
                                     <div className="flex flex-wrap gap-2 mb-3">
-                                        <button onClick={() => { if (cartRef.current.length > 0) handleVoidCartItem(cartRef.current[cartRef.current.length - 1].cartId); }} title="Delete [F1]" className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            🗑️ Delete [f1]
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleVoidCartItem(cartRef.current[cartRef.current.length - 1].cartId); }} title="Delete [D]" className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🗑️ Delete [D]
                                         </button>
-                                        <button onClick={handleCancelTransaction} title="Batal [F2]" className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            ❌ Batal [f2]
+                                        <button onClick={handleCancelTransaction} title="Batal [X]" className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            ❌ Batal [X]
                                         </button>
-                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Harga [F3]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            💰 Ubah Harga [f3]
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Harga [H]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            💰 Ubah Harga [H]
                                         </button>
-                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditQty(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Qty [F4]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            📦 Ubah Qty [f4]
+                                        <button onClick={() => { if (cartRef.current.length > 0) handleOpenEditQty(cartRef.current[cartRef.current.length - 1]); }} title="Ubah Qty [Q]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            📦 Ubah Qty [Q]
                                         </button>
-                                        <button onClick={() => setIsReprintModalOpen(true)} title="Reprint [F5]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            🖨️ Reprint [f5]
+                                        <button onClick={() => setIsReprintModalOpen(true)} title="Reprint [R]" className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🖨️ Reprint [R]
                                         </button>
-                                        <button onClick={handlePauseTransaction} title="Jeda [F6]" className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            ⏸️ Jeda [f6]
+                                        <button onClick={handlePauseTransaction} title="Jeda [J]" className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            ⏸️ Jeda [J]
                                         </button>
-                                        <button onClick={() => setIsPausedListModalOpen(true)} title="Jeda List [F7]" className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            📂 Jeda List ({pausedTransactions.length}) [f7]
+                                        <button onClick={() => setIsPausedListModalOpen(true)} title="Jeda List [L]" className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            📂 Jeda List ({pausedTransactions.length}) [L]
                                         </button>
-                                        <button onClick={() => { const s = document.getElementById('pos-search-input'); if (s) { s.focus(); s.select(); } }} title="Cari Item [F8]" className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            🔍 Cari Item [f8]
+                                        <button onClick={() => { const s = document.getElementById('pos-search-input'); if (s) { s.focus(); s.select(); } }} title="Cari Item [F]" className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            🔍 Cari Item [F]
                                         </button>
-                                        <button onClick={() => { if (cartRef.current.length > 0) setIsPaymentModalOpen(true); }} title="Bayar [F9]" className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
-                                            💵 Bayar [f9]
+                                        <button onClick={() => { if (cartRef.current.length > 0) setIsPaymentModalOpen(true); }} title="Bayar [B]" className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1 transition">
+                                            💵 Bayar [B]
                                         </button>
                                     </div>
 
@@ -1483,7 +1518,7 @@
                                             <input 
                                                 id="pos-search-input"
                                                 type="text"
-                                                placeholder="Ketik nama, barcode, atau SKU [f8]..."
+                                                placeholder="Ketik nama, barcode, atau SKU [Tekan F] (Gunakan Panah Atas/Bawah & Enter)..."
                                                 value={searchQuery}
                                                 onChange={e => setSearchQuery(e.target.value)}
                                                 className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3 text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner"
@@ -1521,14 +1556,22 @@
 
                                     {searchResults.length > 0 && (
                                         <div className="mb-4 bg-slate-900 border border-slate-700 rounded-2xl max-h-60 overflow-y-auto shadow-2xl z-40">
-                                            {searchResults.map(prod => (
+                                            {searchResults.map((prod, index) => (
                                                 <div 
                                                     key={prod.id}
                                                     onClick={() => triggerUnitSelection(prod)}
-                                                    className="p-3 hover:bg-indigo-600/30 border-b border-slate-800 last:border-none cursor-pointer flex justify-between items-center transition"
+                                                    onMouseEnter={() => setSelectedSearchIndex(index)}
+                                                    className={`p-3 border-b border-slate-800 last:border-none cursor-pointer flex justify-between items-center transition ${
+                                                        selectedSearchIndex === index 
+                                                            ? 'bg-indigo-600/40 border-l-4 border-l-indigo-400' 
+                                                            : 'hover:bg-indigo-600/30'
+                                                    }`}
                                                 >
                                                     <div className="pr-2 truncate">
-                                                        <p className="font-bold text-sm text-white truncate">{prod.name}</p>
+                                                        <p className="font-bold text-sm text-white truncate">
+                                                            {selectedSearchIndex === index && <span className="text-indigo-300 mr-1.5">▶</span>}
+                                                            {prod.name}
+                                                        </p>
                                                         <p className="text-xs text-slate-400">SKU: {prod.sku} | Barcode: {prod.barcode} | Stok: {prod.stock}</p>
                                                     </div>
                                                     <span className="text-indigo-300 font-black text-xs sm:text-sm whitespace-nowrap shrink-0 ml-2">Rp {prod.sellingPrice.toLocaleString('id-ID')}</span>
@@ -1565,7 +1608,6 @@
                                     </div>
                                 </div>
 
-                                {/* BAGIAN KERANJANG KASIR */}
                                 <div className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col justify-between p-4 shadow-2xl">
                                     <div>
                                         <div className="flex justify-between items-center pb-3 border-b border-slate-800">
@@ -1587,8 +1629,8 @@
                                                             <p className="text-xs font-bold text-white truncate">{item.product.name}</p>
                                                             <div className="flex items-center gap-2 mt-0.5">
                                                                 <span className="text-[10px] text-emerald-400 font-bold">Satuan: {item.unitType}</span>
-                                                                <button onClick={() => handleOpenEditPrice(item)} title="Ubah Harga [f3]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Harga [f3]</button>
-                                                                <button onClick={() => handleOpenEditQty(item)} title="Ubah Qty [f4]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Qty [f4]</button>
+                                                                <button onClick={() => handleOpenEditPrice(item)} title="Ubah Harga [H]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Harga [H]</button>
+                                                                <button onClick={() => handleOpenEditQty(item)} title="Ubah Qty [Q]" className="text-[10px] text-indigo-400 underline font-semibold hover:text-indigo-300">Ubah Qty [Q]</button>
                                                             </div>
                                                             <p className="text-xs text-indigo-300 font-black tabular-nums whitespace-nowrap mt-0.5 max-w-[110px] truncate">
                                                                 Rp {(item.unitSellingPrice * item.qty).toLocaleString('id-ID')}
@@ -1598,7 +1640,7 @@
                                                             <button onClick={() => updateCartQty(item.cartId, -1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">-</button>
                                                             <span className="text-xs font-extrabold w-4 text-center text-white">{item.qty}</span>
                                                             <button onClick={() => updateCartQty(item.cartId, 1)} className="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs">+</button>
-                                                            <button onClick={() => handleVoidCartItem(item.cartId)} title="Delete [f1]" className="w-6 h-6 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded font-bold text-xs flex items-center justify-center ml-1">×</button>
+                                                            <button onClick={() => handleVoidCartItem(item.cartId)} title="Delete [D]" className="w-6 h-6 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded font-bold text-xs flex items-center justify-center ml-1">×</button>
                                                         </div>
                                                     </div>
                                                 ))
@@ -1618,7 +1660,7 @@
                                             onClick={() => setIsPaymentModalOpen(true)}
                                             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 font-black text-white rounded-xl shadow-lg shadow-indigo-600/30 text-sm transition"
                                         >
-                                            Bayar Sekarang [f9]
+                                            Bayar Sekarang [B]
                                         </button>
                                     </div>
                                 </div>
@@ -1894,11 +1936,10 @@
 
                     </main>
 
-                    {/* MODAL EDIT HARGA ITEM DI KERANJANG */}
                     {isEditPriceModalOpen && selectedCartItemForEdit && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">Ubah Harga Jual Item [f3]</h3>
+                                <h3 className="font-bold text-white text-base">Ubah Harga Jual Item [H]</h3>
                                 <p className="text-xs text-slate-400">{selectedCartItemForEdit.product.name} ({selectedCartItemForEdit.unitType})</p>
                                 
                                 <div>
@@ -1919,11 +1960,10 @@
                         </div>
                     )}
 
-                    {/* MODAL EDIT QTY ITEM DI KERANJANG [F4] */}
                     {isEditQtyModalOpen && selectedCartItemForEdit && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">Ubah Qty Item [f4]</h3>
+                                <h3 className="font-bold text-white text-base">Ubah Qty Item [Q]</h3>
                                 <p className="text-xs text-slate-400">{selectedCartItemForEdit.product.name} ({selectedCartItemForEdit.unitType})</p>
                                 
                                 <div>
@@ -1945,12 +1985,11 @@
                         </div>
                     )}
 
-                    {/* MODAL DAFTAR TRANSAKSI YANG DIJEDA (HOLD) [F7] */}
                     {isPausedListModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="font-bold text-white text-base">Daftar Transaksi Dijeda (Hold) [f7]</h3>
+                                    <h3 className="font-bold text-white text-base">Daftar Transaksi Dijeda (Hold) [L]</h3>
                                     <button onClick={() => setIsPausedListModalOpen(false)} className="text-xs text-slate-400 hover:text-white">✕</button>
                                 </div>
 
@@ -1977,11 +2016,10 @@
                         </div>
                     )}
 
-                    {/* MODAL REPRINT STRUK DENGAN PILIHAN DROPDOWN [F5] */}
                     {isReprintModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">REPRINT FAKTUR / STRUK [f5]</h3>
+                                <h3 className="font-bold text-white text-base">REPRINT FAKTUR / STRUK [R]</h3>
                                 <p className="text-xs text-slate-400">Pilih tanggal dan nomor transaksi dari daftar.</p>
 
                                 <div className="space-y-3 text-xs">
@@ -2028,7 +2066,6 @@
                         </div>
                     )}
 
-                    {/* MODAL PILIHAN KONVERSI SATUAN DI POS */}
                     {isUnitModalOpen && selectedProductForUnit && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-indigo-500/40 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl">
@@ -2354,7 +2391,7 @@
                     {isPaymentModalOpen && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">Pembayaran Kasir [f9]</h3>
+                                <h3 className="font-bold text-white text-base">Pembayaran Kasir [B]</h3>
                                 
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div>
