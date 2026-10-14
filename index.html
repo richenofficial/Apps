@@ -435,17 +435,59 @@
                 });
             }, []);
 
-            // PENYEMPURNAAN KONTROL KEYBOARD MENYELURUH UNTUK SEMUA MENU DAN MODAL POS
+            // PERBAIKAN TOTAL KONTROL KEYBOARD (TERUTAMA TOMBOL ESCAPE UNTUK MEMBATALKAN/MENUTUP MODAL)
             useEffect(() => {
                 const handleKeyDown = (e) => {
+                    // Tombol Escape Universal untuk Menutup/Membatalkan Modal apa pun yang sedang terbuka
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        if (isEditPriceModalOpen) {
+                            setIsEditPriceModalOpen(false);
+                            return;
+                        }
+                        if (isEditQtyModalOpen) {
+                            setIsEditQtyModalOpen(false);
+                            return;
+                        }
+                        if (isUnitModalOpen) {
+                            setIsUnitModalOpen(false);
+                            return;
+                        }
+                        if (isPaymentModalOpen) {
+                            setIsPaymentModalOpen(false);
+                            return;
+                        }
+                        if (isReprintModalOpen) {
+                            setIsReprintModalOpen(false);
+                            return;
+                        }
+                        if (isPausedListModalOpen) {
+                            setIsPausedListModalOpen(false);
+                            return;
+                        }
+                        if (isProductModalOpen) {
+                            setIsProductModalOpen(false);
+                            return;
+                        }
+                        if (isVisualScanOpen) {
+                            setIsVisualScanOpen(false);
+                            return;
+                        }
+                        if (isScannerOpen) {
+                            setIsScannerOpen(false);
+                            return;
+                        }
+                        if (isReceiptModalOpen) {
+                            setIsReceiptModalOpen(false);
+                            return;
+                        }
+                    }
+
                     // 1. Logika untuk Modal Edit Harga (s4.PNG)
                     if (isEditPriceModalOpen) {
                         if (e.key === 'Enter') {
                             e.preventDefault();
                             handleSaveCustomPrice();
-                        } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setIsEditPriceModalOpen(false);
                         }
                         return;
                     }
@@ -455,9 +497,6 @@
                         if (e.key === 'Enter') {
                             e.preventDefault();
                             handleSaveCustomQty();
-                        } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setIsEditQtyModalOpen(false);
                         }
                         return;
                     }
@@ -482,10 +521,6 @@
                         } else if (e.key === 'Enter') {
                             e.preventDefault();
                             confirmAddToCartWithUnit();
-                            return;
-                        } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setIsUnitModalOpen(false);
                             return;
                         }
                     }
@@ -590,7 +625,7 @@
 
                 window.addEventListener('keydown', handleKeyDown, true);
                 return () => window.removeEventListener('keydown', handleKeyDown, true);
-            }, [searchQuery, selectedSearchIndex, products, isUnitModalOpen, isEditPriceModalOpen, isEditQtyModalOpen, selectedProductForUnit, selectedUnitObj]);
+            }, [searchQuery, selectedSearchIndex, products, isUnitModalOpen, isEditPriceModalOpen, isEditQtyModalOpen, isPaymentModalOpen, isReprintModalOpen, isPausedListModalOpen, isProductModalOpen, isVisualScanOpen, isScannerOpen, isReceiptModalOpen, selectedProductForUnit, selectedUnitObj]);
 
             const refreshData = async () => {
                 const p = await db.products.toArray();
