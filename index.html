@@ -580,7 +580,7 @@
                 }
             };
 
-            // PERBAIKAN STABILITAS SCANNER BARCODE MENGGUNAKAN HTML5-QRCODE
+            // SCANNER BARCODE MENGGUNAKAN HTML5-QRCODE
             useEffect(() => {
                 if (isScannerOpen) {
                     const timer = setTimeout(() => {
@@ -640,11 +640,14 @@
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } } })
                         .then(stream => {
                             visualStreamRef.current = stream;
                             if (visualVideoRef.current) {
                                 visualVideoRef.current.srcObject = stream;
+                                visualVideoRef.current.onloadedmetadata = () => {
+                                    visualVideoRef.current.play().catch(e => console.log("Video play error:", e));
+                                };
                             }
                         })
                         .catch(err => {
@@ -676,6 +679,14 @@
                         aiModelRef.current = await mobilenet.load();
                     }
 
+                    // Memastikan video siap dan memiliki dimensi valid sebelum diklasifikasi
+                    if (visualVideoRef.current.readyState < 2) {
+                        await new Promise((resolve) => {
+                            visualVideoRef.current.onloadeddata = resolve;
+                            setTimeout(resolve, 1000);
+                        });
+                    }
+
                     const predictions = await aiModelRef.current.classify(visualVideoRef.current);
                     
                     if (predictions && predictions.length > 0) {
@@ -684,12 +695,27 @@
                         
                         playBeepSound();
 
-                        const keywords = topPrediction.toLowerCase().split(',').map(k => k.trim());
+                        // Pembersihan teks prediksi MobileNet agar pencarian ke database jauh lebih akurat
+                        const cleanedPrediction = topPrediction.toLowerCase();
+                        const keywords = cleanedPrediction.split(',').map(k => k.trim()).filter(k => k.length > 2);
                         
                         let matchedProduct = null;
+                        
+                        // 1. Cek pencocokan persis atau parsial dengan keyword dari prediksi MobileNet
                         for (let key of keywords) {
-                            matchedProduct = products.find(p => p.name.toLowerCase().includes(key));
+                            matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
                             if (matchedProduct) break;
+                        }
+
+                        // 2. Jika belum ketemu, coba cocokan kata per kata dari string prediksi lengkap
+                        if (!matchedProduct) {
+                            const words = cleanedPrediction.split(/\s+/);
+                            for (let word of words) {
+                                if (word.length > 3) {
+                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(word));
+                                    if (matchedProduct) break;
+                                }
+                            }
                         }
 
                         if (matchedProduct) {
