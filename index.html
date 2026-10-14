@@ -435,8 +435,62 @@
                 });
             }, []);
 
+            // PENYEMPURNAAN KONTROL KEYBOARD MENYELURUH UNTUK SEMUA MENU DAN MODAL POS
             useEffect(() => {
                 const handleKeyDown = (e) => {
+                    // 1. Logika untuk Modal Edit Harga (s4.PNG)
+                    if (isEditPriceModalOpen) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveCustomPrice();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setIsEditPriceModalOpen(false);
+                        }
+                        return;
+                    }
+
+                    // 2. Logika untuk Modal Edit Qty (s5.PNG)
+                    if (isEditQtyModalOpen) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveCustomQty();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setIsEditQtyModalOpen(false);
+                        }
+                        return;
+                    }
+
+                    // 3. Logika untuk Modal Pilih Satuan (s3.PNG)
+                    if (isUnitModalOpen && selectedProductForUnit) {
+                        const availableUnits = (selectedProductForUnit.units && selectedProductForUnit.units.length > 0) ? selectedProductForUnit.units : [
+                            { name: 'Pcs', isi: 1, costPrice: selectedProductForUnit.costPrice || 0, sellingPrice: selectedProductForUnit.sellingPrice || 0 }
+                        ];
+                        const currentIndex = availableUnits.findIndex(u => selectedUnitObj && u.name === selectedUnitObj.name);
+
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            const nextIndex = (currentIndex < availableUnits.length - 1) ? currentIndex + 1 : 0;
+                            setSelectedUnitObj(availableUnits[nextIndex]);
+                            return;
+                        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            const prevIndex = (currentIndex > 0) ? currentIndex - 1 : availableUnits.length - 1;
+                            setSelectedUnitObj(availableUnits[prevIndex]);
+                            return;
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            confirmAddToCartWithUnit();
+                            return;
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setIsUnitModalOpen(false);
+                            return;
+                        }
+                    }
+
+                    // 4. Logika Utama Menu POS
                     if (activeTabRef.current === 'pos') {
                         const activeTag = document.activeElement ? document.activeElement.tagName : '';
                         const searchInputElem = document.getElementById('pos-search-input');
@@ -536,7 +590,7 @@
 
                 window.addEventListener('keydown', handleKeyDown, true);
                 return () => window.removeEventListener('keydown', handleKeyDown, true);
-            }, [searchQuery, selectedSearchIndex, products]);
+            }, [searchQuery, selectedSearchIndex, products, isUnitModalOpen, isEditPriceModalOpen, isEditQtyModalOpen, selectedProductForUnit, selectedUnitObj]);
 
             const refreshData = async () => {
                 const p = await db.products.toArray();
@@ -636,7 +690,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN ALGORITMA PENCOCOKAN BOBOT KATA KUNCI KETAT (AKURASI TINGGI UNTUK SEMUA PRODUK)
+            // VISUAL SCAN AI DENGAN ALGORITMA PENCOCOKAN BOBOT KATA KUNCI KETAT
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -697,7 +751,6 @@
                         let matchedProduct = null;
                         const genericIgnoreWords = ['packet', 'envelope', 'carton', 'box', 'bag', 'plastic', 'container', 'wrapper', 'bottle', 'can', 'cup'];
 
-                        // SISTEM SKOR BOBOT KATA KUNCI (MENCEGAH SALAH PILIH ANTAR PRODUK SEPERTI INDOMIE / BARANG BARU)
                         let bestScore = -1;
 
                         for (let prod of products) {
@@ -705,10 +758,9 @@
                             const pName = (prod.name || '').toLowerCase();
                             const nameWords = pName.split(/\s+/).filter(w => w.length > 2 && !genericIgnoreWords.includes(w));
 
-                            // Periksa setiap prediksi dari model AI (p[0] memiliki bobot tertinggi)
                             predictions.forEach((pred, predIndex) => {
                                 const predText = (pred.className || '').toLowerCase();
-                                const weight = 5 - predIndex; // Prediksi utama mendapat bobot 5, berikutnya 4, 3, dst.
+                                const weight = 5 - predIndex;
 
                                 nameWords.forEach(word => {
                                     if (predText.includes(word)) {
@@ -723,7 +775,6 @@
                             }
                         }
 
-                        // Jika skor bobot 0 (tidak ada kata kunci yang cocok secara langsung), gunakan fallback ke produk terbaru
                         if (!matchedProduct || bestScore <= 0) {
                             if (products.length > 0) {
                                 matchedProduct = products[products.length - 1];
@@ -1983,6 +2034,7 @@
                                 <div>
                                     <label className="text-xs text-slate-300 font-bold">Harga Jual Baru (Rp)</label>
                                     <input 
+                                        autoFocus
                                         type="number"
                                         value={customNewPrice}
                                         onChange={e => setCustomNewPrice(e.target.value)}
@@ -2007,6 +2059,7 @@
                                 <div>
                                     <label className="text-xs text-slate-300 font-bold">Kuantitas Baru (Qty)</label>
                                     <input 
+                                        autoFocus
                                         type="number"
                                         min="1"
                                         value={customNewQty}
@@ -2115,7 +2168,7 @@
 
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="text-xs text-slate-300 font-bold mb-1.5 block">Pilih Satuan:</label>
+                                        <label className="text-xs text-slate-300 font-bold mb-1.5 block">Pilih Satuan (Gunakan Panah Kiri/Kanan & Enter):</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             {(selectedProductForUnit.units && selectedProductForUnit.units.length > 0 ? selectedProductForUnit.units : [
                                                 { name: 'Pcs', isi: 1, costPrice: selectedProductForUnit.costPrice || 0, sellingPrice: selectedProductForUnit.sellingPrice || 0 }
