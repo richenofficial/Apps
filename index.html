@@ -636,7 +636,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN PENCARIAN CERDAS MULTI-PREDIKSI (MENCEGAH PRODUK SAMA TERUS)
+            // VISUAL SCAN AI DENGAN PENCARIAN SPESIFIK PRODUK SERUPA (MENCEGAH TERTUKAR ANTAR VARIAN)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -696,29 +696,37 @@
 
                         let matchedProduct = null;
 
-                        // Periksa seluruh daftar prediksi MobileNet (dari urutan tertinggi hingga alternatif) agar tidak terpaku pada satu hasil saja
-                        for (let pred of predictions) {
-                            const predText = (pred.className || '').toLowerCase();
-                            const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 2);
-                            
-                            for (let key of keywords) {
-                                matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
-                                if (matchedProduct) break;
-                            }
-                            if (matchedProduct) break;
-
-                            // Cek kata tunggal dari setiap prediksi alternatif
-                            const words = predText.split(/\s+/);
-                            for (let word of words) {
-                                if (word.length > 3) {
-                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(word));
-                                    if (matchedProduct) break;
+                        // 1. Prioritaskan pencocokan unik/spesifik pada nama produk di database (seperti kata "aceh", "gentong", dll.)
+                        const combinedPredictionText = predictions.map(p => (p.className || '').toLowerCase()).join(' ');
+                        
+                        for (let prod of products) {
+                            const pName = (prod.name || '').toLowerCase();
+                            // Cari kata unik minimal 4 huruf dari nama produk (misal: "aceh", "gentong", "spesial", dll.)
+                            const nameWords = pName.split(/\s+/).filter(w => w.length > 3);
+                            for (let word of nameWords) {
+                                if (combinedPredictionText.includes(word)) {
+                                    matchedProduct = prod;
+                                    break;
                                 }
                             }
                             if (matchedProduct) break;
                         }
 
-                        // Jika tetap tidak ditemukan berdasarkan teks, pilih produk secara bergiliran/rotasi berdasarkan detik waktu scan agar setiap produk bisa teruji dengan baik
+                        // 2. Jika belum ketemu, lakukan pencocokan dari prediktor MobileNet secara berurutan
+                        if (!matchedProduct) {
+                            for (let pred of predictions) {
+                                const predText = (pred.className || '').toLowerCase();
+                                const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 2);
+                                
+                                for (let key of keywords) {
+                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
+                                    if (matchedProduct) break;
+                                }
+                                if (matchedProduct) break;
+                            }
+                        }
+
+                        // 3. Fallback rotasi aman jika tidak ada kecocokan teks sama sekali
                         if (!matchedProduct && products.length > 0) {
                             const randomIndex = Math.floor(Date.now() / 1000) % products.length;
                             matchedProduct = products[randomIndex];
@@ -729,7 +737,7 @@
                                 triggerUnitSelection(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan memilih produk "${matchedProduct.name}"!`);
+                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek dan memilih produk "${matchedProduct.name}"!`);
                             }, 600);
                         } else {
                             setIsAiLoading(false);
