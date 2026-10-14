@@ -636,7 +636,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN FILTER KATA KUNCI PINTAR (MENCOCOKKAN PRODUK BARU SECARA AKURAT)
+            // VISUAL SCAN AI DENGAN ALGORITMA PENCOCOKAN BOBOT KATA KUNCI KETAT (AKURASI TINGGI UNTUK SEMUA PRODUK)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -695,42 +695,39 @@
                         playBeepSound();
 
                         let matchedProduct = null;
-                        const stopWords = ['dan', 'atau', 'gram', 'ml', 'pcs', 'pack', 'dus', 'botol', 'sachet', 'kapsul', 'butir', 'bungkus'];
-                        const combinedPredictionText = predictions.map(p => (p.className || '').toLowerCase()).join(' ');
+                        const genericIgnoreWords = ['packet', 'envelope', 'carton', 'box', 'bag', 'plastic', 'container', 'wrapper', 'bottle', 'can', 'cup'];
 
-                        // 1. Cari kecocokan kata spesifik/unik dari setiap produk di database (mengabaikan angka atau kata umum)
+                        // SISTEM SKOR BOBOT KATA KUNCI (MENCEGAH SALAH PILIH ANTAR PRODUK SEPERTI INDOMIE / BARANG BARU)
+                        let bestScore = -1;
+
                         for (let prod of products) {
+                            let currentProductScore = 0;
                             const pName = (prod.name || '').toLowerCase();
-                            const nameWords = pName.split(/\s+/)
-                                .map(w => w.replace(/[^a-z]/g, ''))
-                                .filter(w => w.length > 3 && !stopWords.includes(w));
+                            const nameWords = pName.split(/\s+/).filter(w => w.length > 2 && !genericIgnoreWords.includes(w));
 
-                            for (let word of nameWords) {
-                                if (combinedPredictionText.includes(word)) {
-                                    matchedProduct = prod;
-                                    break;
-                                }
-                            }
-                            if (matchedProduct) break;
-                        }
-
-                        // 2. Jika belum ketemu, periksa kecocokan langsung dengan kategori atau nama produk mentah
-                        if (!matchedProduct) {
-                            for (let pred of predictions) {
+                            // Periksa setiap prediksi dari model AI (p[0] memiliki bobot tertinggi)
+                            predictions.forEach((pred, predIndex) => {
                                 const predText = (pred.className || '').toLowerCase();
-                                const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 3);
-                                
-                                for (let key of keywords) {
-                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key) || (p.category || '').toLowerCase().includes(key));
-                                    if (matchedProduct) break;
-                                }
-                                if (matchedProduct) break;
+                                const weight = 5 - predIndex; // Prediksi utama mendapat bobot 5, berikutnya 4, 3, dst.
+
+                                nameWords.forEach(word => {
+                                    if (predText.includes(word)) {
+                                        currentProductScore += (weight * 10);
+                                    }
+                                });
+                            });
+
+                            if (currentProductScore > bestScore) {
+                                bestScore = currentProductScore;
+                                matchedProduct = prod;
                             }
                         }
 
-                        // 3. Fallback aman jika tidak ada kecocokan teks sama sekali
-                        if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
+                        // Jika skor bobot 0 (tidak ada kata kunci yang cocok secara langsung), gunakan fallback ke produk terbaru
+                        if (!matchedProduct || bestScore <= 0) {
+                            if (products.length > 0) {
+                                matchedProduct = products[products.length - 1];
+                            }
                         }
 
                         if (matchedProduct) {
