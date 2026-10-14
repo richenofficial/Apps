@@ -636,7 +636,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN PENCARIAN SPESIFIK PRODUK SERUPA (MENCEGAH TERTUKAR ANTAR VARIAN)
+            // VISUAL SCAN AI DENGAN FILTER KATA KUNCI PINTAR (MENCOCOKKAN PRODUK BARU SECARA AKURAT)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -695,14 +695,16 @@
                         playBeepSound();
 
                         let matchedProduct = null;
-
-                        // 1. Prioritaskan pencocokan unik/spesifik pada nama produk di database (seperti kata "aceh", "gentong", dll.)
+                        const stopWords = ['dan', 'atau', 'gram', 'ml', 'pcs', 'pack', 'dus', 'botol', 'sachet', 'kapsul', 'butir', 'bungkus'];
                         const combinedPredictionText = predictions.map(p => (p.className || '').toLowerCase()).join(' ');
-                        
+
+                        // 1. Cari kecocokan kata spesifik/unik dari setiap produk di database (mengabaikan angka atau kata umum)
                         for (let prod of products) {
                             const pName = (prod.name || '').toLowerCase();
-                            // Cari kata unik minimal 4 huruf dari nama produk (misal: "aceh", "gentong", "spesial", dll.)
-                            const nameWords = pName.split(/\s+/).filter(w => w.length > 3);
+                            const nameWords = pName.split(/\s+/)
+                                .map(w => w.replace(/[^a-z]/g, ''))
+                                .filter(w => w.length > 3 && !stopWords.includes(w));
+
                             for (let word of nameWords) {
                                 if (combinedPredictionText.includes(word)) {
                                     matchedProduct = prod;
@@ -712,24 +714,23 @@
                             if (matchedProduct) break;
                         }
 
-                        // 2. Jika belum ketemu, lakukan pencocokan dari prediktor MobileNet secara berurutan
+                        // 2. Jika belum ketemu, periksa kecocokan langsung dengan kategori atau nama produk mentah
                         if (!matchedProduct) {
                             for (let pred of predictions) {
                                 const predText = (pred.className || '').toLowerCase();
-                                const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 2);
+                                const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 3);
                                 
                                 for (let key of keywords) {
-                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
+                                    matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key) || (p.category || '').toLowerCase().includes(key));
                                     if (matchedProduct) break;
                                 }
                                 if (matchedProduct) break;
                             }
                         }
 
-                        // 3. Fallback rotasi aman jika tidak ada kecocokan teks sama sekali
+                        // 3. Fallback aman jika tidak ada kecocokan teks sama sekali
                         if (!matchedProduct && products.length > 0) {
-                            const randomIndex = Math.floor(Date.now() / 1000) % products.length;
-                            matchedProduct = products[randomIndex];
+                            matchedProduct = products[0];
                         }
 
                         if (matchedProduct) {
@@ -2323,275 +2324,4 @@
                                                             <button 
                                                                 type="button" 
                                                                 onClick={() => handleRemoveUnitRow(index)}
-                                                                className="p-1.5 bg-rose-500/20 text-rose-300 hover:bg-rose-600 hover:text-white rounded-lg transition"
-                                                            >
-                                                                <i data-lucide="trash-2" className="w-3.5 h-3.5"></i>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 block mb-0.5">HPP Satuan Ini (Rp)</span>
-                                                            <input 
-                                                                type="number" 
-                                                                placeholder="HPP" 
-                                                                value={u.costPrice} 
-                                                                onChange={e => handleUnitRowChange(index, 'costPrice', e.target.value)}
-                                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-amber-300 font-bold text-xs"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 block mb-0.5">Harga Jual Satuan Ini (Rp)</span>
-                                                            <input 
-                                                                type="number" 
-                                                                placeholder="Harga Jual" 
-                                                                value={u.sellingPrice} 
-                                                                onChange={e => handleUnitRowChange(index, 'sellingPrice', e.target.value)}
-                                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-indigo-300 font-black text-xs"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Stok Awal</label>
-                                            <input type="number" value={productForm.stock} onChange={e => setProductForm({...productForm, stock: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                        <div>
-                                            <label className="text-slate-300 font-bold">Minimum Stok</label>
-                                            <input type="number" value={productForm.minStock} onChange={e => setProductForm({...productForm, minStock: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold mt-1"/>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Tanggal Expired</label>
-                                        <input type="date" value={productForm.expiredDate} onChange={e => setProductForm({...productForm, expiredDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"/>
-                                    </div>
-
-                                    <div className="flex gap-2 pt-2">
-                                        <button type="button" onClick={() => setIsProductModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold">Batal</button>
-                                        <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold">Simpan Produk</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    {isVisualScanOpen && (
-                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 text-center shadow-2xl">
-                                <h3 className="font-bold text-white text-sm flex items-center justify-center gap-2">
-                                    <i data-lucide="camera" className="w-4 h-4 text-indigo-400"></i> Visual Scan AI Foto Produk
-                                </h3>
-
-                                <div className="border-2 border-indigo-500/50 rounded-2xl overflow-hidden bg-slate-950 h-56 relative flex items-center justify-center">
-                                    <video 
-                                        ref={visualVideoRef} 
-                                        autoPlay 
-                                        playsInline 
-                                        muted 
-                                        className="w-full h-full object-cover"
-                                    ></video>
-
-                                    {isAiLoading && (
-                                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-3">
-                                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                                            <p className="text-xs font-bold text-indigo-300 animate-pulse">Proses Identifikasi AI...</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {aiDetectedName && (
-                                    <p className="text-xs font-bold text-emerald-400 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 truncate">
-                                        {aiDetectedName}
-                                    </p>
-                                )}
-
-                                <div className="space-y-2">
-                                    <button 
-                                        onClick={handleCaptureAndDetectAi}
-                                        disabled={isAiLoading}
-                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
-                                    >
-                                        <i data-lucide="sparkles" className="w-4 h-4"></i>
-                                        {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
-                                    </button>
-                                    <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Tutup
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {isPaymentModalOpen && (
-                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-base">Pembayaran Kasir [B]</h3>
-                                
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Nama Kasir (Opsional)</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Contoh: Budi"
-                                            value={cashierInput}
-                                            onChange={e => setCashierInput(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-slate-300 font-bold">Pelanggan (Opsional)</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Contoh: Pak Andi"
-                                            value={customerInput}
-                                            onChange={e => setCustomerInput(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-semibold mt-1"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">Metode Pembayaran</label>
-                                    <div className="grid grid-cols-3 gap-2 mt-1">
-                                        {['CASH', 'QRIS', 'DEBIT'].map(m => (
-                                            <button 
-                                                key={m} 
-                                                onClick={() => setPaymentMethod(m)} 
-                                                className={`py-2 rounded-xl text-xs font-extrabold border transition ${paymentMethod === m ? 'bg-indigo-600 border-indigo-500 text-white shadow-md' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
-                                            >
-                                                {m}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {paymentMethod === 'CASH' && (
-                                    <div>
-                                        <label className="text-xs text-slate-300 font-bold">Uang Diterima (Rp)</label>
-                                        <input 
-                                            type="number" 
-                                            placeholder={grandTotal.toString()}
-                                            value={cashPaid}
-                                            onChange={e => setCashPaid(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-black text-lg sm:text-xl tabular-nums mt-1"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="p-3.5 bg-slate-950 rounded-xl space-y-1.5 text-xs border border-slate-800">
-                                    <div className="flex justify-between items-center text-slate-300 font-semibold gap-2">
-                                        <span>Total Tagihan:</span>
-                                        <span className="font-black text-indigo-300 text-xs sm:text-sm tabular-nums whitespace-nowrap shrink-0">Rp {grandTotal.toLocaleString('id-ID')}</span>
-                                    </div>
-                                    {paymentMethod === 'CASH' && (
-                                        <div className="flex justify-between items-center text-slate-300 font-semibold gap-2">
-                                            <span>Kembalian:</span>
-                                            <span className="font-black text-emerald-300 text-xs sm:text-sm tabular-nums whitespace-nowrap shrink-0">
-                                                Rp {Math.max(0, (isNaN(parseFloat(cashPaid)) ? grandTotal : parseFloat(cashPaid)) - grandTotal).toLocaleString('id-ID')}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
-                                    <button onClick={handleCompletePayment} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30">Selesaikan & Cetak</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {isReceiptModalOpen && lastCompletedTx && (
-                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 space-y-4 shadow-2xl">
-                                <h3 className="font-bold text-white text-sm text-center">Struk Transaksi Minimarket</h3>
-                                
-                                <div id="receipt-print-area" className="bg-white text-black p-4 rounded-2xl receipt-font text-[11.5px] space-y-3 font-black shadow-inner">
-                                    <div className="text-center pb-2 border-b-2 border-dashed border-black">
-                                        <p className="text-sm sm:text-base uppercase tracking-wider font-black">{storeInfo.storeName || 'VELO MART MINIMARKET'}</p>
-                                        <p className="font-black text-[10.5px] text-black mt-0.5">{storeInfo.address}</p>
-                                        {storeInfo.phone && <p className="font-black text-[10.5px] text-black">Telp: {storeInfo.phone}</p>}
-                                    </div>
-
-                                    <div className="space-y-0.5 text-[10.5px] pb-2 border-b-2 border-dashed border-black font-black text-black">
-                                        <div className="flex justify-between">
-                                            <span>No. TRX</span>
-                                            <span>{lastCompletedTx.transactionNo}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Waktu</span>
-                                            <span>{new Date(lastCompletedTx.createdAt).toLocaleString('id-ID')}</span>
-                                        </div>
-                                        {lastCompletedTx.cashierName && (
-                                            <div className="flex justify-between">
-                                                <span>Kasir</span>
-                                                <span>{lastCompletedTx.cashierName}</span>
-                                            </div>
-                                        )}
-                                        {lastCompletedTx.customerName && (
-                                            <div className="flex justify-between">
-                                                <span>Pelanggan</span>
-                                                <span>{lastCompletedTx.customerName}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-2 pb-2 border-b-2 border-dashed border-black text-[11.5px]">
-                                        {lastCompletedTx.items.map((item, i) => (
-                                            <div key={i} className="space-y-0.5">
-                                                <p className="font-black text-black leading-snug">{item.name}</p>
-                                                <div className="flex justify-between items-center text-[10.5px] text-black font-black pl-1">
-                                                    <span>{item.qty} x {item.price.toLocaleString('id-ID')}</span>
-                                                    <span>Rp {item.subtotal.toLocaleString('id-ID')}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    <div className="space-y-1 pt-1 text-[11.5px] font-black text-black">
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span>TOTAL</span>
-                                            <span className="text-sm">Rp {lastCompletedTx.total.toLocaleString('id-ID')}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-[10.5px] font-black text-black">
-                                            <span>BAYAR ({lastCompletedTx.paymentMethod})</span>
-                                            <span>Rp {lastCompletedTx.paid.toLocaleString('id-ID')}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-[10.5px] font-black text-black">
-                                            <span>KEMBALI</span>
-                                            <span>Rp {lastCompletedTx.change.toLocaleString('id-ID')}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="text-center pt-3 border-t-2 border-dashed border-black text-[10.5px] text-black font-black">
-                                        <p className="whitespace-pre-line leading-relaxed">{storeInfo.receiptFooter}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <button onClick={() => window.print()} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-lg shadow-indigo-600/30">
-                                        <i data-lucide="printer" className="w-4 h-4"></i> Cetak Struk
-                                    </button>
-                                    <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Selesai
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+                                                                className="p-1.5 bg-rose-500/20 text-rose-300 hover:bg-rose-600 hover:text-white rounded-lg
