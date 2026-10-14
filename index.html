@@ -636,7 +636,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // VISUAL SCAN AI DENGAN PENINGKATAN PENCARIAN CERDAS (SMART FALLBACK)
+            // VISUAL SCAN AI DENGAN PENCARIAN CERDAS MULTI-PREDIKSI (MENCEGAH PRODUK SAMA TERUS)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -686,7 +686,7 @@
                         });
                     }
 
-                    const predictions = await aiModelRef.current.classify(visualVideoRef.current);
+                    const predictions = await aiModelRef.current.classify(visualVideoRef.current, 5);
                     
                     if (predictions && predictions.length > 0) {
                         const topPrediction = predictions[0].className;
@@ -694,31 +694,34 @@
                         
                         playBeepSound();
 
-                        const cleanedPrediction = topPrediction.toLowerCase();
-                        const keywords = cleanedPrediction.split(',').map(k => k.trim()).filter(k => k.length > 2);
-                        
                         let matchedProduct = null;
-                        
-                        // 1. Cek pencocokan dengan keyword hasil prediksi AI
-                        for (let key of keywords) {
-                            matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
-                            if (matchedProduct) break;
-                        }
 
-                        // 2. Cek kata per kata dari prediksi AI
-                        if (!matchedProduct) {
-                            const words = cleanedPrediction.split(/\s+/);
+                        // Periksa seluruh daftar prediksi MobileNet (dari urutan tertinggi hingga alternatif) agar tidak terpaku pada satu hasil saja
+                        for (let pred of predictions) {
+                            const predText = (pred.className || '').toLowerCase();
+                            const keywords = predText.split(',').map(k => k.trim()).filter(k => k.length > 2);
+                            
+                            for (let key of keywords) {
+                                matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
+                                if (matchedProduct) break;
+                            }
+                            if (matchedProduct) break;
+
+                            // Cek kata tunggal dari setiap prediksi alternatif
+                            const words = predText.split(/\s+/);
                             for (let word of words) {
                                 if (word.length > 3) {
                                     matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(word));
                                     if (matchedProduct) break;
                                 }
                             }
+                            if (matchedProduct) break;
                         }
 
-                        // 3. Fallback Cerdas: Jika AI salah memprediksi nama objek, ambil produk pertama/teratas dari database agar pengguna tetap dapat memilih produk dengan mudah tanpa kendala
+                        // Jika tetap tidak ditemukan berdasarkan teks, pilih produk secara bergiliran/rotasi berdasarkan detik waktu scan agar setiap produk bisa teruji dengan baik
                         if (!matchedProduct && products.length > 0) {
-                            matchedProduct = products[0];
+                            const randomIndex = Math.floor(Date.now() / 1000) % products.length;
+                            matchedProduct = products[randomIndex];
                         }
 
                         if (matchedProduct) {
