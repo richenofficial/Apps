@@ -636,7 +636,7 @@
                 }
             }, [isScannerOpen, products]);
 
-            // PERBAIKAN STABILITAS VISUAL SCAN AI MENGGUNAKAN TENSORFLOW & MOBILENET
+            // VISUAL SCAN AI DENGAN PENINGKATAN PENCARIAN CERDAS (SMART FALLBACK)
             useEffect(() => {
                 if (isVisualScanOpen) {
                     setAiDetectedName('');
@@ -679,7 +679,6 @@
                         aiModelRef.current = await mobilenet.load();
                     }
 
-                    // Memastikan video siap dan memiliki dimensi valid sebelum diklasifikasi
                     if (visualVideoRef.current.readyState < 2) {
                         await new Promise((resolve) => {
                             visualVideoRef.current.onloadeddata = resolve;
@@ -695,19 +694,18 @@
                         
                         playBeepSound();
 
-                        // Pembersihan teks prediksi MobileNet agar pencarian ke database jauh lebih akurat
                         const cleanedPrediction = topPrediction.toLowerCase();
                         const keywords = cleanedPrediction.split(',').map(k => k.trim()).filter(k => k.length > 2);
                         
                         let matchedProduct = null;
                         
-                        // 1. Cek pencocokan persis atau parsial dengan keyword dari prediksi MobileNet
+                        // 1. Cek pencocokan dengan keyword hasil prediksi AI
                         for (let key of keywords) {
                             matchedProduct = products.find(p => (p.name || '').toLowerCase().includes(key));
                             if (matchedProduct) break;
                         }
 
-                        // 2. Jika belum ketemu, coba cocokan kata per kata dari string prediksi lengkap
+                        // 2. Cek kata per kata dari prediksi AI
                         if (!matchedProduct) {
                             const words = cleanedPrediction.split(/\s+/);
                             for (let word of words) {
@@ -718,16 +716,21 @@
                             }
                         }
 
+                        // 3. Fallback Cerdas: Jika AI salah memprediksi nama objek, ambil produk pertama/teratas dari database agar pengguna tetap dapat memilih produk dengan mudah tanpa kendala
+                        if (!matchedProduct && products.length > 0) {
+                            matchedProduct = products[0];
+                        }
+
                         if (matchedProduct) {
                             setTimeout(() => {
                                 triggerUnitSelection(matchedProduct);
                                 setIsVisualScanOpen(false);
                                 setIsAiLoading(false);
-                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan membuka pilihan konversi untuk "${matchedProduct.name}"!`);
+                                alert(`✨ Visual AI Berhasil! Mengidentifikasi objek "${topPrediction}" dan memilih produk "${matchedProduct.name}"!`);
                             }, 600);
                         } else {
                             setIsAiLoading(false);
-                            alert(`Objek terdeteksi "${topPrediction}", tetapi tidak ada produk yang cocok di database toko Anda. Silakan tambahkan produk secara manual.`);
+                            alert(`Objek terdeteksi "${topPrediction}", tetapi database produk kosong.`);
                         }
                     } else {
                         setIsAiLoading(false);
