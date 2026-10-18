@@ -313,15 +313,16 @@
             const [isBackingUp, setIsBackingUp] = useState(false);
             const [lastBackupTime, setLastBackupTime] = useState(localStorage.getItem('last_backup_time') || null);
 
-            const [datePreset, setDatePreset] = useState('ALL');
-            const [startDate, setStartDate] = useState('');
-            const [endDate, setEndDate] = useState('');
+            const [datePreset, setDatePreset] = useState('TODAY');
+            const [startDate, setStartDate] = useState(formatDateLocal(new Date()));
+            const [endDate, setEndDate] = useState(formatDateLocal(new Date()));
+            const [reportCashierFilter, setReportCashierFilter] = useState('');
+            const [reportCustomerFilter, setReportCustomerFilter] = useState('');
 
-            // State khusus filter tanggal & modal interaktif di Dashboard (Default: TODAY / Hari Ini)
             const [dashDatePreset, setDashDatePreset] = useState('TODAY');
             const [dashStartDate, setDashStartDate] = useState(formatDateLocal(new Date()));
             const [dashEndDate, setDashEndDate] = useState(formatDateLocal(new Date()));
-            const [dashboardModalType, setDashboardModalType] = useState(null); // 'lowStock' | 'expiredSoon' | 'fastMoving' | 'slowMoving' | null
+            const [dashboardModalType, setDashboardModalType] = useState(null);
 
             const [cart, setCart] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
@@ -389,20 +390,38 @@
 
             const cartRef = useRef(cart);
             cartRef.current = cart;
-            const isPaymentModalOpenRef = useRef(isPaymentModalOpen);
-            isPaymentModalOpenRef.current = isPaymentModalOpen;
-            const isUnitModalOpenRef = useRef(isUnitModalOpen);
-            isUnitModalOpenRef.current = isUnitModalOpen;
-            const isReprintModalOpenRef = useRef(isReprintModalOpen);
-            isReprintModalOpenRef.current = isReprintModalOpen;
-            const isPausedListModalOpenRef = useRef(isPausedListModalOpen);
-            isPausedListModalOpenRef.current = isPausedListModalOpen;
-            const isEditPriceModalOpenRef = useRef(isEditPriceModalOpen);
-            isEditPriceModalOpenRef.current = isEditPriceModalOpen;
-            const isEditQtyModalOpenRef = useRef(isEditQtyModalOpen);
-            isEditQtyModalOpenRef.current = isEditQtyModalOpen;
             const activeTabRef = useRef(activeTab);
             activeTabRef.current = activeTab;
+
+            const modalStateRef = useRef({
+                isEditPriceModalOpen,
+                isEditQtyModalOpen,
+                isUnitModalOpen,
+                isPaymentModalOpen,
+                isReprintModalOpen,
+                isPausedListModalOpen,
+                isProductModalOpen,
+                isVisualScanOpen,
+                isScannerOpen,
+                isReceiptModalOpen,
+                dashboardModalType
+            });
+
+            useEffect(() => {
+                modalStateRef.current = {
+                    isEditPriceModalOpen,
+                    isEditQtyModalOpen,
+                    isUnitModalOpen,
+                    isPaymentModalOpen,
+                    isReprintModalOpen,
+                    isPausedListModalOpen,
+                    isProductModalOpen,
+                    isVisualScanOpen,
+                    isScannerOpen,
+                    isReceiptModalOpen,
+                    dashboardModalType
+                };
+            });
 
             useEffect(() => {
                 initSampleData().then(async () => {
@@ -443,51 +462,75 @@
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    if (e.key === 'Escape') {
-                        e.preventDefault();
-                        if (dashboardModalType) {
-                            setDashboardModalType(null);
+                    if (e.key === ' ' || e.code === 'Space' || e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27 || e.keyCode === 32) {
+                        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                        const isTypingInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag);
+                        
+                        const currentModals = modalStateRef.current;
+                        const hasAnyModalOpen = currentModals.isEditPriceModalOpen || 
+                                               currentModals.isEditQtyModalOpen || 
+                                               currentModals.isUnitModalOpen || 
+                                               currentModals.isPaymentModalOpen || 
+                                               currentModals.isReprintModalOpen || 
+                                               currentModals.isPausedListModalOpen || 
+                                               currentModals.isProductModalOpen || 
+                                               currentModals.isVisualScanOpen || 
+                                               currentModals.isScannerOpen || 
+                                               currentModals.isReceiptModalOpen || 
+                                               currentModals.dashboardModalType;
+
+                        if (e.key === ' ' && isTypingInput) {
                             return;
                         }
-                        if (isEditPriceModalOpen) {
-                            setIsEditPriceModalOpen(false);
-                            return;
-                        }
-                        if (isEditQtyModalOpen) {
-                            setIsEditQtyModalOpen(false);
-                            return;
-                        }
-                        if (isUnitModalOpen) {
-                            setIsUnitModalOpen(false);
-                            return;
-                        }
-                        if (isPaymentModalOpen) {
-                            setIsPaymentModalOpen(false);
-                            return;
-                        }
-                        if (isReprintModalOpen) {
-                            setIsReprintModalOpen(false);
-                            return;
-                        }
-                        if (isPausedListModalOpen) {
-                            setIsPausedListModalOpen(false);
-                            return;
-                        }
-                        if (isProductModalOpen) {
-                            setIsProductModalOpen(false);
-                            return;
-                        }
-                        if (isVisualScanOpen) {
-                            setIsVisualScanOpen(false);
-                            return;
-                        }
-                        if (isScannerOpen) {
-                            setIsScannerOpen(false);
-                            return;
-                        }
-                        if (isReceiptModalOpen) {
-                            setIsReceiptModalOpen(false);
-                            return;
+
+                        if (hasAnyModalOpen) {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (currentModals.isEditPriceModalOpen) {
+                                setIsEditPriceModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isEditQtyModalOpen) {
+                                setIsEditQtyModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isUnitModalOpen) {
+                                setIsUnitModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isPaymentModalOpen) {
+                                setIsPaymentModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isReprintModalOpen) {
+                                setIsReprintModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isPausedListModalOpen) {
+                                setIsPausedListModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isProductModalOpen) {
+                                setIsProductModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.isVisualScanOpen) {
+                                setIsVisualScanOpen(false);
+                                return;
+                            }
+                            if (currentModals.isScannerOpen) {
+                                setIsScannerOpen(false);
+                                return;
+                            }
+                            if (currentModals.isReceiptModalOpen) {
+                                setIsReceiptModalOpen(false);
+                                return;
+                            }
+                            if (currentModals.dashboardModalType) {
+                                setDashboardModalType(null);
+                                return;
+                            }
                         }
                     }
 
@@ -586,7 +629,7 @@
 
                         if (upperChar === 'D') {
                             e.preventDefault();
-                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                            if (cartRef.current.length > 0 && !isPaymentModalOpen && !isUnitModalOpen && !isEditPriceModalOpen && !isEditQtyModalOpen) {
                                 const lastItem = cartRef.current[cartRef.current.length - 1];
                                 handleVoidCartItem(lastItem.cartId);
                             }
@@ -595,32 +638,32 @@
                             handleCancelTransaction();
                         } else if (upperChar === 'H') {
                             e.preventDefault();
-                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                            if (cartRef.current.length > 0 && !isPaymentModalOpen && !isUnitModalOpen && !isEditPriceModalOpen && !isEditQtyModalOpen) {
                                 handleOpenEditPrice(cartRef.current[cartRef.current.length - 1]);
                             }
                         } else if (upperChar === 'Q') {
                             e.preventDefault();
-                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current && !isEditPriceModalOpenRef.current && !isEditQtyModalOpenRef.current) {
+                            if (cartRef.current.length > 0 && !isPaymentModalOpen && !isUnitModalOpen && !isEditPriceModalOpen && !isEditQtyModalOpen) {
                                 handleOpenEditQty(cartRef.current[cartRef.current.length - 1]);
                             }
                         } else if (upperChar === 'R') {
                             e.preventDefault();
-                            if (!isReprintModalOpenRef.current) {
+                            if (!isReprintModalOpen) {
                                 setIsReprintModalOpen(true);
                             }
                         } else if (upperChar === 'J') {
                             e.preventDefault();
-                            if (!isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
+                            if (!isPaymentModalOpen && !isUnitModalOpen) {
                                 handlePauseTransaction();
                             }
                         } else if (upperChar === 'L') {
                             e.preventDefault();
-                            if (!isPausedListModalOpenRef.current) {
+                            if (!isPausedListModalOpen) {
                                 setIsPausedListModalOpen(true);
                             }
                         } else if (upperChar === 'B') {
                             e.preventDefault();
-                            if (cartRef.current.length > 0 && !isPaymentModalOpenRef.current && !isUnitModalOpenRef.current) {
+                            if (cartRef.current.length > 0 && !isPaymentModalOpen && !isUnitModalOpen) {
                                 setIsPaymentModalOpen(true);
                             }
                         }
@@ -629,7 +672,7 @@
 
                 window.addEventListener('keydown', handleKeyDown, true);
                 return () => window.removeEventListener('keydown', handleKeyDown, true);
-            }, [searchQuery, selectedSearchIndex, products, isUnitModalOpen, isEditPriceModalOpen, isEditQtyModalOpen, isPaymentModalOpen, isReprintModalOpen, isPausedListModalOpen, isProductModalOpen, isVisualScanOpen, isScannerOpen, isReceiptModalOpen, selectedProductForUnit, selectedUnitObj, dashboardModalType]);
+            }, [searchQuery, selectedSearchIndex, products, selectedProductForUnit, selectedUnitObj]);
 
             const refreshData = async () => {
                 const p = await db.products.toArray();
@@ -785,23 +828,36 @@
                         
                         playBeepSound();
 
+                        // PERBAIKAN AKURASI PENCARIAN DI DATABASE (Mendukung Produk Lama & Baru Input)
                         let matchedProduct = null;
-                        const genericIgnoreWords = ['packet', 'envelope', 'carton', 'box', 'bag', 'plastic', 'container', 'wrapper', 'bottle', 'can', 'cup'];
+                        const genericIgnoreWords = ['packet', 'envelope', 'carton', 'box', 'bag', 'plastic', 'container', 'wrapper', 'bottle', 'can', 'cup', 'tray', 'cartridge'];
 
                         let bestScore = -1;
 
+                        // Periksa setiap produk di state products secara teliti
                         for (let prod of products) {
                             let currentProductScore = 0;
                             const pName = (prod.name || '').toLowerCase();
+                            const pCategory = (prod.category || '').toLowerCase();
+                            
+                            // Ekstrak kata kunci dari nama dan kategori produk di database
                             const nameWords = pName.split(/\s+/).filter(w => w.length > 2 && !genericIgnoreWords.includes(w));
+                            const categoryWords = pCategory.split(/\s+/).filter(w => w.length > 2);
 
                             predictions.forEach((pred, predIndex) => {
                                 const predText = (pred.className || '').toLowerCase();
-                                const weight = 5 - predIndex;
+                                const weight = 5 - predIndex; // Prediksi teratas diberi bobot lebih tinggi
 
+                                // Cocokkan kata per kata dengan hasil prediksi MobileNet
                                 nameWords.forEach(word => {
                                     if (predText.includes(word)) {
-                                        currentProductScore += (weight * 10);
+                                        currentProductScore += (weight * 15);
+                                    }
+                                });
+
+                                categoryWords.forEach(cWord => {
+                                    if (predText.includes(cWord)) {
+                                        currentProductScore += (weight * 5);
                                     }
                                 });
                             });
@@ -812,9 +868,12 @@
                             }
                         }
 
+                        // Fallback cerdas: Jika skor pencocokan kata 0 (tidak ada kata yang sama persis), 
+                        // pilih produk yang paling AKHIR di-input (produk baru) atau jika kosong produk pertama, 
+                        // agar tidak stuck di produk pertama database secara statis.
                         if (!matchedProduct || bestScore <= 0) {
                             if (products.length > 0) {
-                                matchedProduct = products[products.length - 1];
+                                matchedProduct = products[products.length - 1]; // Mengambil produk terbaru yang di-input
                             }
                         }
 
@@ -888,13 +947,9 @@
                     thirtyDaysAgo.setDate(now.getDate() - 29);
                     setStartDate(formatDateLocal(thirtyDaysAgo));
                     setEndDate(formatDateLocal(now));
-                } else if (presetKey === 'ALL') {
-                    setStartDate('');
-                    setEndDate('');
                 }
             };
 
-            // Fungsi filter tanggal khusus Dashboard dengan preset & custom tanggal, bulan, tahun
             const handleDashApplyPreset = (presetKey) => {
                 setDashDatePreset(presetKey);
                 const now = new Date();
@@ -926,10 +981,17 @@
                 const txDate = formatDateLocal(new Date(t.createdAt));
                 if (startDate && txDate < startDate) return false;
                 if (endDate && txDate > endDate) return false;
+                if (reportCashierFilter && reportCashierFilter.trim() !== '') {
+                    const cName = (t.cashierName || '').toLowerCase();
+                    if (!cName.includes(reportCashierFilter.toLowerCase().trim())) return false;
+                }
+                if (reportCustomerFilter && reportCustomerFilter.trim() !== '') {
+                    const custName = (t.customerName || '').toLowerCase();
+                    if (!custName.includes(reportCustomerFilter.toLowerCase().trim())) return false;
+                }
                 return true;
             });
 
-            // Filter transaksi khusus dashboard
             const dashFilteredTransactions = transactions.filter(t => {
                 const txDate = formatDateLocal(new Date(t.createdAt));
                 if (dashStartDate && txDate < dashStartDate) return false;
@@ -1502,7 +1564,6 @@
                                     </button>
                                 </div>
 
-                                {/* Filter Tanggal Khusus Dashboard (Tanpa Semua Waktu, Dilengkapi Pilihan Custom Tanggal, Bulan & Tahun) */}
                                 <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-md">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-xs text-slate-400 font-bold mr-1">Filter Tanggal Dashboard:</span>
@@ -1510,11 +1571,18 @@
                                             { key: 'TODAY', label: 'Hari Ini' },
                                             { key: 'YESTERDAY', label: 'Kemarin' },
                                             { key: 'LAST_7', label: '7 Hari Terakhir' },
-                                            { key: 'LAST_30', label: '30 Hari Terakhir' }
+                                            { key: 'LAST_30', label: '30 Hari Terakhir' },
+                                            { key: 'CUSTOM', label: 'Custom' }
                                         ].map(item => (
                                             <button
                                                 key={item.key}
-                                                onClick={() => handleDashApplyPreset(item.key)}
+                                                onClick={() => {
+                                                    if (item.key !== 'CUSTOM') {
+                                                        handleDashApplyPreset(item.key);
+                                                    } else {
+                                                        setDashDatePreset('CUSTOM');
+                                                    }
+                                                }}
                                                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
                                                     dashDatePreset === item.key 
                                                         ? 'bg-indigo-600 border-indigo-500 text-white shadow' 
@@ -1526,26 +1594,28 @@
                                         ))}
                                     </div>
 
-                                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-800/80">
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Dari Tanggal / Bulan / Tahun</label>
-                                            <input 
-                                                type="date" 
-                                                value={dashStartDate} 
-                                                onChange={e => { setDashStartDate(e.target.value); setDashDatePreset('CUSTOM'); }} 
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                            />
+                                    {dashDatePreset === 'CUSTOM' && (
+                                        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-800/80">
+                                            <div className="flex-1 w-full">
+                                                <label className="text-xs text-slate-300 font-bold mb-1 block">Dari Tanggal / Bulan / Tahun</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={dashStartDate} 
+                                                    onChange={e => setDashStartDate(e.target.value)} 
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1 w-full">
+                                                <label className="text-xs text-slate-300 font-bold mb-1 block">Sampai Tanggal / Bulan / Tahun</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={dashEndDate} 
+                                                    onChange={e => setDashEndDate(e.target.value)} 
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Sampai Tanggal / Bulan / Tahun</label>
-                                            <input 
-                                                type="date" 
-                                                value={dashEndDate} 
-                                                onChange={e => { setDashEndDate(e.target.value); setDashDatePreset('CUSTOM'); }} 
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -1588,9 +1658,7 @@
                                     </div>
                                 </div>
 
-                                {/* Icon Interaktif untuk Stok Menipis, Expired, Fast Moving, & Slow Moving */}
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {/* Icon Stok Menipis */}
                                     <button 
                                         onClick={() => setDashboardModalType('lowStock')}
                                         className="bg-slate-900 hover:bg-slate-800 border border-amber-500/40 p-4 rounded-2xl flex items-center gap-3 transition shadow-lg text-left group"
@@ -1605,7 +1673,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Icon Expired Soon */}
                                     <button 
                                         onClick={() => setDashboardModalType('expiredSoon')}
                                         className="bg-slate-900 hover:bg-slate-800 border border-rose-500/40 p-4 rounded-2xl flex items-center gap-3 transition shadow-lg text-left group"
@@ -1620,7 +1687,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Icon Fast Moving */}
                                     <button 
                                         onClick={() => setDashboardModalType('fastMoving')}
                                         className="bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 p-4 rounded-2xl flex items-center gap-3 transition shadow-lg text-left group"
@@ -1635,7 +1701,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Icon Slow Moving */}
                                     <button 
                                         onClick={() => setDashboardModalType('slowMoving')}
                                         className="bg-slate-900 hover:bg-slate-800 border border-indigo-500/40 p-4 rounded-2xl flex items-center gap-3 transition shadow-lg text-left group"
@@ -1723,7 +1788,7 @@
                                                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> 
                                                     Arahkan Kamera ke Barcode Produk
                                                 </span>
-                                                <button onClick={() => setIsScannerOpen(false)} className="text-xs bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2.5 py-1 rounded-lg font-bold transition">Tutup Kamera</button>
+                                                <button onClick={() => setIsScannerOpen(false)} className="text-xs bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2.5 py-1 rounded-lg font-bold transition">Tutup Kamera [Space/Esc]</button>
                                             </div>
                                             <div id="reader" className="overflow-hidden rounded-xl h-52 bg-slate-950 border border-slate-800"></div>
                                         </div>
@@ -1941,15 +2006,21 @@
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-xs text-slate-400 font-bold mr-1">Filter Cepat:</span>
                                         {[
-                                            { key: 'ALL', label: 'Semua Transaksi' },
                                             { key: 'TODAY', label: 'Hari Ini' },
                                             { key: 'YESTERDAY', label: 'Kemarin' },
                                             { key: 'LAST_7', label: '7 Hari Terakhir' },
-                                            { key: 'LAST_30', label: '30 Hari Terakhir' }
+                                            { key: 'LAST_30', label: '30 Hari Terakhir' },
+                                            { key: 'CUSTOM', label: 'Custom' }
                                         ].map(item => (
                                             <button
                                                 key={item.key}
-                                                onClick={() => handleApplyPreset(item.key)}
+                                                onClick={() => {
+                                                    if (item.key !== 'CUSTOM') {
+                                                        handleApplyPreset(item.key);
+                                                    } else {
+                                                        setDatePreset('CUSTOM');
+                                                    }
+                                                }}
                                                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
                                                     datePreset === item.key 
                                                         ? 'bg-indigo-600 border-indigo-500 text-white shadow' 
@@ -1961,32 +2032,50 @@
                                         ))}
                                     </div>
 
-                                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-800/80">
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Dari Tanggal</label>
+                                    {datePreset === 'CUSTOM' && (
+                                        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-800/80">
+                                            <div className="flex-1 w-full">
+                                                <label className="text-xs text-slate-300 font-bold mb-1 block">Dari Tanggal / Bulan / Tahun</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={startDate} 
+                                                    onChange={e => setStartDate(e.target.value)} 
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1 w-full">
+                                                <label className="text-xs text-slate-300 font-bold mb-1 block">Sampai Tanggal / Bulan / Tahun</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={endDate} 
+                                                    onChange={e => setEndDate(e.target.value)} 
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* TAMBAHAN FILTER KASIR DAN PELANGGAN */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                                        <div>
+                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Filter Kasir</label>
                                             <input 
-                                                type="date" 
-                                                value={startDate} 
-                                                onChange={e => { setStartDate(e.target.value); setDatePreset('CUSTOM'); }} 
+                                                type="text" 
+                                                placeholder="Cari nama kasir..." 
+                                                value={reportCashierFilter} 
+                                                onChange={e => setReportCashierFilter(e.target.value)} 
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                             />
                                         </div>
-                                        <div className="flex-1 w-full">
-                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Sampai Tanggal</label>
+                                        <div>
+                                            <label className="text-xs text-slate-300 font-bold mb-1 block">Filter Pelanggan</label>
                                             <input 
-                                                type="date" 
-                                                value={endDate} 
-                                                onChange={e => { setEndDate(e.target.value); setDatePreset('CUSTOM'); }} 
+                                                type="text" 
+                                                placeholder="Cari nama pelanggan..." 
+                                                value={reportCustomerFilter} 
+                                                onChange={e => setReportCustomerFilter(e.target.value)} 
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                             />
-                                        </div>
-                                        <div className="flex gap-2 w-full sm:w-auto self-end">
-                                            <button 
-                                                onClick={() => handleApplyPreset('ALL')}
-                                                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold w-full sm:w-auto"
-                                            >
-                                                Reset Filter
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -2022,7 +2111,7 @@
                                             <tbody className="divide-y divide-slate-800/80 font-medium">
                                                 {filteredTransactions.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="6" className="p-6 text-center text-slate-400 font-semibold">Tidak ada data transaksi pada rentang tanggal ini.</td>
+                                                        <td colSpan="6" className="p-6 text-center text-slate-400 font-semibold">Tidak ada data transaksi pada filter ini.</td>
                                                     </tr>
                                                 ) : (
                                                     filteredTransactions.slice().reverse().map(t => (
@@ -2111,7 +2200,6 @@
 
                     </main>
 
-                    {/* Modal Rincian Dashboard (Stok Menipis / Expired / Fast Moving / Slow Moving) */}
                     {dashboardModalType && (
                         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-5 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
@@ -2122,7 +2210,7 @@
                                         {dashboardModalType === 'fastMoving' && '🔥 Rincian Produk Terlaris (Fast Moving)'}
                                         {dashboardModalType === 'slowMoving' && '💤 Rincian Produk Paling Lama Terjual (Slow Moving)'}
                                     </h3>
-                                    <button onClick={() => setDashboardModalType(null)} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg font-bold">✕</button>
+                                    <button onClick={() => setDashboardModalType(null)} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg font-bold">✕ [Space/Esc]</button>
                                 </div>
 
                                 <div className="overflow-y-auto space-y-2.5 flex-1 pr-1">
@@ -2188,7 +2276,7 @@
                                     )}
                                 </div>
 
-                                <button onClick={() => setDashboardModalType(null)} className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">Tutup</button>
+                                <button onClick={() => setDashboardModalType(null)} className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">Tutup [Space/Esc]</button>
                             </div>
                         </div>
                     )}
@@ -2211,8 +2299,8 @@
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsEditPriceModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
-                                    <button onClick={handleSaveCustomPrice} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan</button>
+                                    <button onClick={() => setIsEditPriceModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal [Space/Esc]</button>
+                                    <button onClick={handleSaveCustomPrice} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan [Enter]</button>
                                 </div>
                             </div>
                         </div>
@@ -2237,8 +2325,8 @@
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsEditQtyModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
-                                    <button onClick={handleSaveCustomQty} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan</button>
+                                    <button onClick={() => setIsEditQtyModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal [Space/Esc]</button>
+                                    <button onClick={handleSaveCustomQty} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Simpan [Enter]</button>
                                 </div>
                             </div>
                         </div>
@@ -2249,7 +2337,7 @@
                             <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl">
                                 <div className="flex justify-between items-center">
                                     <h3 className="font-bold text-white text-base">Daftar Transaksi Dijeda (Hold) [L]</h3>
-                                    <button onClick={() => setIsPausedListModalOpen(false)} className="text-xs text-slate-400 hover:text-white">✕</button>
+                                    <button onClick={() => setIsPausedListModalOpen(false)} className="text-xs text-slate-400 hover:text-white">✕ [Space/Esc]</button>
                                 </div>
 
                                 <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -2270,7 +2358,7 @@
                                     )}
                                 </div>
 
-                                <button onClick={() => setIsPausedListModalOpen(false)} className="w-full py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Tutup</button>
+                                <button onClick={() => setIsPausedListModalOpen(false)} className="w-full py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Tutup [Space/Esc]</button>
                             </div>
                         </div>
                     )}
@@ -2318,7 +2406,7 @@
                                 </div>
 
                                 <div className="flex gap-2 pt-2">
-                                    <button onClick={() => setIsReprintModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Keluar</button>
+                                    <button onClick={() => setIsReprintModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Keluar [Space/Esc]</button>
                                     <button onClick={handleExecuteReprint} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">Cetak</button>
                                 </div>
                             </div>
@@ -2382,14 +2470,14 @@
                                         onClick={() => setIsUnitModalOpen(false)} 
                                         className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
                                     >
-                                        Batal
+                                        Batal [Space/Esc]
                                     </button>
                                     <button 
                                         type="button" 
                                         onClick={confirmAddToCartWithUnit} 
                                         className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-indigo-600/30"
                                     >
-                                        Masukkan Keranjang
+                                        Masukkan Keranjang [Enter]
                                     </button>
                                 </div>
                             </div>
@@ -2592,7 +2680,7 @@
                                     </div>
 
                                     <div className="flex gap-2 pt-2">
-                                        <button type="button" onClick={() => setIsProductModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold">Batal</button>
+                                        <button type="button" onClick={() => setIsProductModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold">Batal [Space/Esc]</button>
                                         <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold">Simpan Produk</button>
                                     </div>
                                 </form>
@@ -2640,7 +2728,7 @@
                                         {isAiLoading ? "Sedang Menganalisis..." : "Ambil Foto & Deteksi AI"}
                                     </button>
                                     <button onClick={() => setIsVisualScanOpen(false)} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Tutup
+                                        Tutup [Space/Esc]
                                     </button>
                                 </div>
                             </div>
@@ -2719,7 +2807,7 @@
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal</button>
+                                    <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold">Batal [Space/Esc]</button>
                                     <button onClick={handleCompletePayment} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30">Selesaikan & Cetak</button>
                                 </div>
                             </div>
@@ -2798,7 +2886,7 @@
                                         <i data-lucide="printer" className="w-4 h-4"></i> Cetak Struk
                                     </button>
                                     <button onClick={() => setIsReceiptModalOpen(false)} className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold">
-                                        Selesai
+                                        Selesai [Space/Esc]
                                     </button>
                                 </div>
                             </div>
